@@ -1,0 +1,15 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Tooling caches / local config
+.phpunit.result.cache
+.phpcs-cache
+/tests/php/wp-tests-config.php
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# NOTE: assets/build/ is intentionally committed (D11).

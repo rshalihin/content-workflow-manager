@@ -28,10 +28,15 @@ example in CLAUDE.md and the directory layout in the dev plan.
   `includes/Workflow/WorkflowManager.php`.
 - Composer PSR-4: `"Sit_Cwm\\": "includes/"`.
 - Methods and variables stay `snake_case` (`can_transition()`, `$post_id`).
-- Consequence: two WordPress phpcs sniffs must be excluded repo-wide in
-  `phpcs.xml.dist` — `WordPress.Files.FileName` and
-  `WordPress.NamingConventions.ValidClassName` (documented in step 02, nothing
-  else gets excluded).
+- Consequence: exactly one WordPress phpcs sniff is excluded repo-wide in
+  `phpcs.xml.dist` — `WordPress.Files.FileName` (documented in step 02, nothing
+  else gets excluded). WPCS 3 has no `WordPress.NamingConventions.ValidClassName`
+  sniff (referencing it is a fatal phpcs error); its replacement,
+  `PEAR.NamingConventions.ValidClassName`, accepts `StudlyCase` class names, so
+  it stays enabled (verified in step 02).
+- Inline `phpcs:ignore`/`phpcs:disable` is allowed only for names dictated by
+  WordPress itself (e.g. `ABSPATH`, `DB_*` in test bootstrap/config), always
+  scoped to the specific sniff with a reason.
 
 ## D3 — Workflow statuses (`_sit_cwm_status`)
 

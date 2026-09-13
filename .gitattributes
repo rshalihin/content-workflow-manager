@@ -1,0 +1,9 @@
+# Normalize to LF so phpcs line-ending sniffs pass on Windows checkouts.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

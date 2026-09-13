@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<ruleset name="Content Workflow Manager">
+	<description>WordPress Coding Standards for Content Workflow Manager.</description>
+
+	<file>.</file>
+
+	<exclude-pattern>/vendor/*</exclude-pattern>
+	<exclude-pattern>/node_modules/*</exclude-pattern>
+	<exclude-pattern>/assets/build/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg name="parallel" value="8"/>
+	<arg value="sp"/>
+
+	<!-- Environment. -->
+	<config name="testVersion" value="7.4-"/>
+	<config name="minimum_wp_version" value="6.5"/>
+
+	<!-- Standards. -->
+	<rule ref="WordPress">
+		<!--
+			Decision D2 (01-decisions-and-conventions.md): classes are namespaced
+			PSR-4 (Sit_Cwm\Workflow\WorkflowManager in includes/Workflow/WorkflowManager.php),
+			which conflicts with WordPress' class-*.php file naming.
+		-->
+		<exclude name="WordPress.Files.FileName"/>
+	</rule>
+	<rule ref="WordPress-Extra"/>
+	<rule ref="WordPress-Docs"/>
+	<rule ref="PHPCompatibilityWP"/>
+
+	<!-- Text domain (D1). -->
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="sit-cwm"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Global prefixes (D1). -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="sit_cwm"/>
+				<element value="Sit_Cwm"/>
+				<element value="SIT_CWM"/>
+			</property>
+		</properties>
+	</rule>
+</ruleset>

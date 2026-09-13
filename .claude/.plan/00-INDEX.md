@@ -50,7 +50,7 @@ naming, class-style, and data-shape decisions that every later step assumes.
 
 Tick a box only when that step's acceptance criteria all pass.
 
-- [ ] 02 Repo scaffold and tooling
+- [x] 02 Repo scaffold and tooling  _(activation check run on local Laragon WP 7.1, not wp-env)_
 - [ ] 03 Plugin bootstrap / Core
 - [ ] 04 Data model + activation
 - [ ] 05 StatusManager

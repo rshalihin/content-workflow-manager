@@ -37,14 +37,18 @@ includes/  admin/  src/  assets/  tests/php/  tests/js/  tests/e2e/   (+ .gitkee
 4. **phpcs.xml.dist**: rules `WordPress`, `WordPress-Extra`,
    `WordPress-Docs`, `PHPCompatibilityWP` with `testVersion 7.4-`. Config
    `minimum_wp_version 6.5`. Set `text_domain` to `sit-cwm` and prefixes to
-   `sit_cwm`/`Sit_Cwm`/`SIT_CWM` on the respective sniffs. Exclude exactly two
-   sniffs, with an XML comment citing decision D2:
-   `WordPress.Files.FileName`, `WordPress.NamingConventions.ValidClassName`.
+   `sit_cwm`/`Sit_Cwm`/`SIT_CWM` on the respective sniffs. Exclude exactly one
+   sniff, with an XML comment citing decision D2: `WordPress.Files.FileName`.
+   (`WordPress.NamingConventions.ValidClassName` no longer exists in WPCS 3.)
    Exclude paths: `vendor/`, `node_modules/`, `assets/build/`.
 5. **phpunit.xml.dist**: bootstrap `tests/php/bootstrap.php`, two suites —
    `unit` (`tests/php/unit`, no WP) and `integration` (`tests/php/integration`,
-   WP test library). Bootstrap loads the WP test lib only when
-   `WP_TESTS_DIR`/`WP_PHPUNIT__DIR` is set, so unit tests run anywhere.
+   WP test library). Bootstrap loads the WP test lib only when `WP_TESTS_DIR`
+   or `WP_PHPUNIT__TESTS_CONFIG` is set, so unit tests run anywhere.
+   (`WP_PHPUNIT__DIR` is not usable as the signal: wp-phpunit's autoloaded file
+   sets it unconditionally.) Local non-Docker runs (Laragon): copy
+   `tests/php/wp-tests-config-sample.php` to `tests/php/wp-tests-config.php`
+   (git-ignored, dedicated DB) and run `composer test:integration`.
 6. **uninstall.php**: `if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) { exit; }`;
    delete option `sit_cwm_settings`, `sit_cwm_db_version`; drop the activity
    table; delete `_sit_cwm_*` meta; remove custom caps from all roles. Gate the
