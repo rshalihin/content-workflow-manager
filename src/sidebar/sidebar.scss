@@ -1,0 +1,97 @@
+// Named sidebar.scss, not style.scss: @wordpress/scripts splits style.scss
+// into a separate style-sidebar.css chunk, while Sit_Cwm\Core\Assets loads
+// sidebar.css.
+
+.sit-cwm-sidebar-loading {
+	display: flex;
+	justify-content: center;
+	padding: 16px;
+}
+
+.sit-cwm-sidebar-notice {
+	margin: 0;
+}
+
+.sit-cwm-field + .sit-cwm-field {
+	margin-top: 16px;
+}
+
+.sit-cwm-field-label {
+	display: block;
+	margin-bottom: 8px;
+	font-size: 11px;
+	font-weight: 500;
+	line-height: 1.4;
+	text-transform: uppercase;
+}
+
+.sit-cwm-help {
+	margin: 8px 0 0;
+	color: #757575;
+}
+
+.sit-cwm-error {
+	margin: 8px 0 0;
+	color: #cc1818;
+}
+
+.sit-cwm-status-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 8px;
+	border: 1px solid #ddd;
+	border-radius: 2px;
+	font-weight: 500;
+}
+
+.sit-cwm-status-swatch {
+	flex-shrink: 0;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+}
+
+.sit-cwm-reviewer-current {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.sit-cwm-avatar {
+	border-radius: 50%;
+}
+
+.sit-cwm-due-date-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.sit-cwm-due-date-value.is-overdue {
+	color: #cc1818;
+	font-weight: 500;
+}
+
+.sit-cwm-due-date-picker {
+	padding: 8px;
+}
+
+.sit-cwm-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.sit-cwm-comment-form .components-notice {
+	margin: 0 0 8px;
+}
+
+.sit-cwm-confirm-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}

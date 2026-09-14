@@ -52,7 +52,3 @@ Unit tests cover the full matrix (6 × 6 = 36 pairs):
   introducing an unknown status is sanitized away.
 - No test in this file touches `$wpdb`, `wp_set_current_user()`, or meta —
   if one does, logic leaked into the wrong class.
-
-## Commit
-
-`feat(workflow): add TransitionManager state machine with filterable map`

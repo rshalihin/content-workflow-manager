@@ -66,15 +66,66 @@ if ( ! defined( 'SIT_CWM_DB_VERSION' ) ) {
 	define( 'SIT_CWM_DB_VERSION', '1.0.0' );
 }
 
+// Bail before loading any PHP 7.4+ code. Everything above parses on old PHP.
+if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
+	add_action( 'admin_notices', 'sit_cwm_php_version_notice' );
+	return;
+}
+
 if ( file_exists( SIT_CWM_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
 	require_once SIT_CWM_PLUGIN_DIR . 'vendor/autoload.php';
 } else {
 	spl_autoload_register( 'sit_cwm_autoload' );
 }
 
+register_activation_hook( __FILE__, array( \Sit_Cwm\Core\Activator::class, 'activate' ) );
+register_deactivation_hook( __FILE__, array( \Sit_Cwm\Core\Deactivator::class, 'deactivate' ) );
+
+add_action( 'plugins_loaded', 'sit_cwm_boot', 10 );
+
+/**
+ * Builds the plugin and boots it.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
+function sit_cwm_boot() {
+	$plugin = new \Sit_Cwm\Core\Plugin( new \Sit_Cwm\Core\Container() );
+	$plugin->boot();
+}
+
+/**
+ * Renders the "PHP too old" admin notice.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
+function sit_cwm_php_version_notice() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
+	printf(
+		'<div class="notice notice-error"><p>%s</p></div>',
+		esc_html(
+			sprintf(
+				/* translators: 1: Required PHP version, 2: Current PHP version. */
+				__( 'Content Workflow Manager requires PHP %1$s or higher. This site runs PHP %2$s, so the plugin is not loaded.', 'sit-cwm' ),
+				'7.4',
+				PHP_VERSION
+			)
+		)
+	);
+}
+
 /**
  * PSR-4 fallback autoloader for `Sit_Cwm\` classes, used when the plugin runs
  * from a clone or release zip without `composer install`.
+ *
+ * Mirrors `composer.json`: `Sit_Cwm\Admin\` lives in `admin/`, everything
+ * else in `includes/`.
  *
  * @since 1.0.0
  *
@@ -82,16 +133,23 @@ if ( file_exists( SIT_CWM_PLUGIN_DIR . 'vendor/autoload.php' ) ) {
  * @return void
  */
 function sit_cwm_autoload( $class_name ) {
-	$prefix = 'Sit_Cwm\\';
+	$map = array(
+		'Sit_Cwm\\Admin\\' => 'admin/',
+		'Sit_Cwm\\'        => 'includes/',
+	);
 
-	if ( 0 !== strpos( $class_name, $prefix ) ) {
+	foreach ( $map as $prefix => $dir ) {
+		if ( 0 !== strpos( $class_name, $prefix ) ) {
+			continue;
+		}
+
+		$relative = substr( $class_name, strlen( $prefix ) );
+		$file     = SIT_CWM_PLUGIN_DIR . $dir . str_replace( '\\', '/', $relative ) . '.php';
+
+		if ( is_readable( $file ) ) {
+			require_once $file;
+		}
+
 		return;
-	}
-
-	$relative = substr( $class_name, strlen( $prefix ) );
-	$file     = SIT_CWM_PLUGIN_DIR . 'includes/' . str_replace( '\\', '/', $relative ) . '.php';
-
-	if ( is_readable( $file ) ) {
-		require_once $file;
 	}
 }

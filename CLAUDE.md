@@ -44,14 +44,65 @@ All PHP must pass `phpcs` with the **WordPress** ruleset (WordPress-Extra recomm
 
 This plugin changes who can approve/publish content, so treat every input as hostile.
 
+### 1. Direct access prevention
+- Every PHP file MUST start with direct execution protection immediately after the opening `<?php`:
+  `if ( ! defined( 'ABSPATH' ) ) { exit; }`
+
+### 2. Input validation & sanitization
+- NEVER trust input from `$_GET`, `$_POST`, `$_REQUEST`, `$_SERVER`, or REST/API parameters.
 - **Never trust client-supplied state.** A REST payload like `{"status": "approved"}` must never be applied directly — the server (`WorkflowManager`) independently re-derives whether the current user may make that transition on that post.
-- Every REST route must define a `permission_callback` (never `__return_true` for anything that mutates data) that checks: authentication, the relevant custom capability, access to the specific post, and workflow-transition validity — in that order, all server-side.
-- Every admin-post/AJAX handler verifies a nonce (`check_ajax_referer()` / `wp_verify_nonce()`) and a capability (`current_user_can()`) before doing anything.
-- Sanitize all input at the boundary: `sanitize_text_field()`, `absint()`, `sanitize_key()`, `wp_unslash()` before sanitizing, `wp_kses_post()` for rich text — matched to the actual data type, not blanket string casting.
-- Escape all output at the point of rendering: `esc_html()`, `esc_attr()`, `esc_url()`, `wp_kses()` — never echo raw user or DB data.
-- All custom SQL must use `$wpdb->prepare()`; never concatenate variables into a query string.
-- No `eval()`, no dynamic `include`/`require` built from user input, no unserialize of untrusted data.
+- Apply `wp_unslash()` before sanitizing superglobal data.
+- Sanitize all input at the boundary, before storage or business logic, matched to the actual data type (not blanket string casting):
+  - Text fields: `sanitize_text_field()` (multi-line: `sanitize_textarea_field()`)
+  - Emails: `sanitize_email()`
+  - Slugs/keys: `sanitize_key()` or `sanitize_title()`
+  - URLs: `esc_url_raw()`
+  - Integers: `absint()` or `intval()`
+  - Rich HTML: `wp_kses_post()`
+- Validate, not just sanitize: check against allow-lists where possible (e.g. workflow status must be a registered status key, reviewer must be an existing user, due date must parse).
+
+### 3. Context-aware output escaping
+- ALWAYS escape at the exact moment of output ("late escaping") — never echo raw user or DB data:
+  - HTML body text: `esc_html()`
+  - HTML attributes: `esc_attr()`
+  - URLs in `href`/`src`: `esc_url()`
+  - JavaScript variables: `wp_json_encode()` (preferably via `wp_add_inline_script()` / `wp_localize_script()`) or `esc_js()`
+  - Allowed HTML tags: `wp_kses()`
+- Use the escaping translation helpers for translated output: `esc_html__()`, `esc_attr__()`, `esc_html_e()`.
+
+### 4. CSRF protection (nonces)
+- Generate nonces for forms with `wp_nonce_field()` or `wp_create_nonce()`, using `sit_cwm_*` action names.
+- Verify nonces on EVERY form submission or state-changing action:
+  - Admin POST actions: `check_admin_referer()`
+  - AJAX callbacks: `check_ajax_referer()`
+  - Custom workflows: `wp_verify_nonce()`
+- REST requests from the editor/dashboard rely on the `wp_rest` nonce via `@wordpress/api-fetch`; don't bypass it.
+- A nonce is not authorization — always pair it with a capability check.
+
+### 5. Authorization & capability checks
+- Always verify privileges with `current_user_can( 'sit_cwm_*' )` (or a meta capability like `edit_post` for a specific post) — never hard-coded role checks.
+- Perform capability checks on every AJAX action, REST endpoint, and admin page load **before** processing any logic.
 - Capability checks belong in the `PermissionManager` / `WorkflowManager` layer, not scattered inline in REST controllers or templates — controllers call into that layer, they don't reimplement authorization logic.
+
+### 6. SQL injection prevention
+- NEVER concatenate or interpolate variables directly into SQL queries.
+- ALWAYS use `$wpdb->prepare()` with explicit placeholders (`%s`, `%d`, `%f`, `%i` for identifiers on WP 6.2+):
+  `$wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}sit_cwm_activity WHERE post_id = %d", $post_id ) );`
+- Table names built from `$wpdb->prefix` + a hard-coded suffix are the only acceptable non-placeholder parts of a query.
+- Prefer core APIs (`WP_Query`, `get_post_meta()`, `get_users()`) over raw SQL when they fit.
+
+### 7. REST API security
+- Every route registered via `register_rest_route()` MUST define an explicit `permission_callback`.
+- NEVER use `'permission_callback' => '__return_true'` unless the endpoint is explicitly public by design (no CWM endpoint that mutates data or exposes workflow/activity/user data is public).
+- Mutating routes' `permission_callback` checks: authentication, the relevant `sit_cwm_*` capability, access to the specific post, and workflow-transition validity — in that order, all server-side.
+- Define `type`, `sanitize_callback`, and `validate_callback` (or a strict `enum`/schema) for all route arguments.
+- Return `WP_Error` with an appropriate HTTP status (401/403/404/422) instead of leaking internal details.
+
+### 8. Banned functions & native API enforcement
+- DO NOT use: `eval()`, `exec()`, `system()`, `shell_exec()`, `passthru()`, `proc_open()`, `popen()`, `create_function()`, or PHP's raw `unserialize()` on untrusted data (use JSON or `maybe_unserialize()`).
+- No dynamic `include`/`require` built from user input.
+- Use the WordPress HTTP API (`wp_remote_get()`, `wp_remote_post()`, `wp_safe_remote_*()` for user-supplied URLs) instead of raw `curl` or `file_get_contents()` on remote URLs.
+- Use `wp_handle_upload()` for file handling, with MIME type validation (`wp_check_filetype_and_ext()`).
 
 ## Architecture rules — keep this extensible
 

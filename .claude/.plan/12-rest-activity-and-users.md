@@ -100,7 +100,3 @@ tests/php/integration/REST/PostsControllerTest.php
 - An author calling `/posts` sees only their own + assigned-reviewer posts,
   verified by creating posts owned by a second user.
 - `orderby=; DROP TABLE` → 400 (enum rejection), nothing executed.
-
-## Commit
-
-`feat(rest): add activity, comment, user and dashboard collection endpoints`

@@ -64,7 +64,3 @@ tests/js/ActivityTimeline.test.jsx
   `apiFetch`).
 - A user without `sit_cwm_view_activity` sees the timeline section hidden and
   the REST call is never made.
-
-## Commit
-
-`feat(activity): add grouped activity timeline component and useActivity hook`

@@ -10,13 +10,15 @@ naming, class-style, and data-shape decisions that every later step assumes.
 
 - Work the steps **in numeric order**. Each step file lists: goal, prerequisites,
   files touched, detailed tasks, the public contract (method/route signatures),
-  acceptance criteria, tests, and the commit message to use.
-- One step ≈ one commit (or a small series). Do not start a step whose
-  prerequisites are unchecked.
+  acceptance criteria, and tests.
+- Do not start a step whose prerequisites are unchecked.
+- **Git commits are made by the developer, never by the AI assistant.** Finish a
+  step, verify it, report the changed files, and leave staging/committing to
+  the developer.
 - Every step ends green: `composer lint` (phpcs, zero errors), `composer test`
   (PHPUnit), and `npm run lint:js` where JS exists.
 - If a step forces a deviation from `01-decisions-and-conventions.md`, update
-  that file in the same commit — it is the single source of truth.
+  that file as part of the same step — it is the single source of truth.
 
 ## Build order (mirrors the dev plan's "Actual Build Order")
 

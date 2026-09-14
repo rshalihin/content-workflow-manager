@@ -84,8 +84,8 @@ description, Installation, FAQ, Screenshots, Changelog, Upgrade Notice.
 1. Bump the version in exactly four places — main plugin header,
    `SIT_CWM_VERSION`, `package.json`, `readme.txt` `Stable tag` — and verify with
    a grep; a mismatch is the classic WP release bug.
-2. `npm run build` and commit `assets/build/`.
-3. `npm run makepot`, commit the POT.
+2. `npm run build` (output in `assets/build/`, tracked in git).
+3. `npm run makepot` to regenerate the POT.
 4. Update CHANGELOG.md (Keep a Changelog format) — `## [1.0.0] - <date>`.
 5. Full CI green on every matrix leg.
 6. Build the zip excluding `.distignore` entries (`tests/`, `src/`, `node_modules/`,
@@ -103,8 +103,3 @@ description, Installation, FAQ, Screenshots, Changelog, Upgrade Notice.
   `WP_DEBUG` on and no notices.
 - Version string identical in all four locations.
 - Screenshots/GIFs exist for sidebar, dashboard, timeline and bulk actions.
-
-## Commit
-
-`docs: add README, architecture, workflow, REST and development documentation`
-then `chore(release): Content Workflow Manager 1.0.0`

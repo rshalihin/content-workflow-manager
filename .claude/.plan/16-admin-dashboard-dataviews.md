@@ -76,7 +76,3 @@ tests/js/fields.test.js
 - Assets load on this screen only (assert `$hook_suffix` guard in a PHP test).
 - Jest: `viewToQuery()` maps every DataViews filter operator to the right REST
   arg; unknown operators are dropped rather than passed through.
-
-## Commit
-
-`feat(admin): add workflow dashboard screen powered by DataViews`

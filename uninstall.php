@@ -18,6 +18,10 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
+// The main plugin file (and its autoloader) is not loaded during uninstall.
+require_once __DIR__ . '/includes/Core/Database.php';
+require_once __DIR__ . '/includes/Workflow/Capabilities.php';
+
 /**
  * Removes all Content Workflow Manager data from the current site, if the
  * site opted in to data deletion.
@@ -35,9 +39,8 @@ function sit_cwm_uninstall_site() {
 		return;
 	}
 
-	// Activity table (D8). Identifier placeholder %i requires WP 6.2+.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange -- Dropping the plugin's own table on uninstall.
-	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $wpdb->prefix . 'sit_cwm_activity' ) );
+	// Activity table (D8) and the `sit_cwm_db_version` option.
+	( new \Sit_Cwm\Core\Database() )->drop();
 
 	// All `_sit_cwm_*` post meta (D6).
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk meta removal on uninstall; no API equivalent for a key prefix.
@@ -48,29 +51,9 @@ function sit_cwm_uninstall_site() {
 		)
 	);
 
-	// Custom capabilities (D5).
-	$capabilities = array(
-		'sit_cwm_manage_workflows',
-		'sit_cwm_change_workflow',
-		'sit_cwm_assign_reviewer',
-		'sit_cwm_review_content',
-		'sit_cwm_approve_content',
-		'sit_cwm_view_activity',
-	);
+	// Custom capabilities (D5), from every role.
+	\Sit_Cwm\Workflow\Capabilities::remove_caps();
 
-	foreach ( array_keys( wp_roles()->roles ) as $role_name ) {
-		$role = get_role( $role_name );
-
-		if ( null === $role ) {
-			continue;
-		}
-
-		foreach ( $capabilities as $capability ) {
-			$role->remove_cap( $capability );
-		}
-	}
-
-	delete_option( 'sit_cwm_db_version' );
 	delete_option( 'sit_cwm_settings' );
 
 	wp_cache_flush();

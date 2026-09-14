@@ -54,7 +54,3 @@ tests/php/integration/SettingsPageTest.php
 - Unchecking `page` removes the workflow meta from `/wp/v2/pages` schema and
   makes `/sit-cwm/v1/posts/<page id>/workflow` return 404, while the stored meta
   rows remain in the database.
-
-## Commit
-
-`feat(admin): add settings screen for enabled post types and uninstall behaviour`

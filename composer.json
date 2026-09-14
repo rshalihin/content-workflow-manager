@@ -22,6 +22,7 @@
 	},
 	"autoload": {
 		"psr-4": {
+			"Sit_Cwm\\Admin\\": "admin/",
 			"Sit_Cwm\\": "includes/"
 		}
 	},

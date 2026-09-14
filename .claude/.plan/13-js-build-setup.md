@@ -9,7 +9,8 @@ extraction, and lint/format/test commands exist before any component is written.
 
 ```
 package.json
-.eslintrc.js            extends 'plugin:@wordpress/eslint-plugin/recommended'
+eslint.config.js        flat config spreading @wordpress/scripts' default (ESLint 10
+                        dropped .eslintrc.*; see D11)
 .prettierrc.js          require( '@wordpress/prettier-config' )
 jest.config.js          (or the wp-scripts default + setup file)
 src/sidebar/index.js
@@ -57,7 +58,7 @@ tests/js/setup.js
    verify the built dashboard chunk does not try to `wp.dataviews`. Confirm the
    final bundle size is reasonable (< ~300 KB gzipped) and note it in
    DEVELOPMENT.md.
-5. **Commit `assets/build/`** (D11) so the plugin runs from a clone/zip without
+5. **Keep `assets/build/` tracked in git** (D11) so the plugin runs from a clone/zip without
    a build step. Add a note in `.gitignore` explaining the deliberate exception.
 6. **Localized bootstrap data** via `wp_add_inline_script` with a single global
    `window.sitCwm = { restNamespace, statuses, capabilities, postTypes, adminUrl }`
@@ -72,7 +73,3 @@ tests/js/setup.js
 - `npm run test:unit` runs (0 tests) without config errors.
 - Loading the block editor with the stub sidebar produces no console errors and
   no jQuery/`wp.*` undefined warnings.
-
-## Commit
-
-`build: add @wordpress/scripts pipeline, lint config and asset enqueues`

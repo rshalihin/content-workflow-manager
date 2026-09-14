@@ -78,7 +78,3 @@ tests/php/integration/PostRepositoryTest.php
 - `set_reviewer_id( $id, 999999 )` (no such user) stores `0`.
 - `get_statuses_for_posts()` over 50 posts adds ≤ 2 queries (assert with
   `$wpdb->num_queries`).
-
-## Commit
-
-`feat(content): register workflow post meta and add PostRepository`

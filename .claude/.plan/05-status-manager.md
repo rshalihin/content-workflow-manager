@@ -59,7 +59,3 @@ tests/php/unit/StatusManagerTest.php
     a non-array or malformed entries leaves core statuses intact.
 - `grep -rn "'review'" includes/` shows status literals only in StatusManager
   and its tests.
-
-## Commit
-
-`feat(workflow): add StatusManager registry with filterable statuses`

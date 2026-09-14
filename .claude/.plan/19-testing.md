@@ -84,7 +84,3 @@ verify the summary notice and the resulting rows.
 - The E2E flow passes from a clean `wp-env` twice in a row (no order dependence).
 - Deleting `assets/build/` and running `npm run build` reproduces byte-stable
   enough output for CI to pass (no uncommitted build drift).
-
-## Commit
-
-`test: add shared fixtures, end-to-end editorial flow and CI workflow`

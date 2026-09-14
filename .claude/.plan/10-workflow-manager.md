@@ -112,7 +112,3 @@ Integration tests, one per bullet:
 - `sit_cwm_status_changed` fires once with `( $post_id, $from, $to, $user_id )`.
 - Unmanaged post type → 404 for all six methods.
 - `add_comment( $id, '' )` → 400; whitespace-only likewise.
-
-## Commit
-
-`feat(workflow): add WorkflowManager orchestrating validation, persistence and logging`

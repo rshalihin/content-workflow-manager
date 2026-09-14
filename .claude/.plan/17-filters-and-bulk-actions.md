@@ -92,7 +92,3 @@ Rules:
 - Duplicate ids in the request are processed once.
 - Bulk assign reviewer to a user lacking `sit_cwm_review_content` → 400 for
   every item, nothing written.
-
-## Commit
-
-`feat(admin): add bulk workflow actions with per-post authorization`

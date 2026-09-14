@@ -65,7 +65,3 @@ fix the seam, not the probe.**
 - Every `@api` method is listed in ARCHITECTURE.md with its signature.
 - No Pro *feature* code lands in this repo — only seams, docs and the test
   fixture.
-
-## Commit
-
-`refactor: add filter context, WP_Error veto support and documented extension API`

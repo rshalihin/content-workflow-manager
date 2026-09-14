@@ -93,7 +93,3 @@ tests/js/StatusControl.test.jsx
   `apiFetch`; `StatusControl` renders the right label/colour; `TransitionActions`
   renders exactly the allowed buttons.
 - `npm run lint:js` clean; no `console.log` left behind.
-
-## Commit
-
-`feat(editor): add Gutenberg workflow sidebar with useWorkflow hook`

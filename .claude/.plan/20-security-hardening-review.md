@@ -80,7 +80,3 @@ Decide and apply consistently, then document:
 - Negative test suite green.
 - The subscriber probe table shows 401/403/404 for every mutating route and no
   data leakage in any body.
-
-## Commit
-
-`chore(security): hardening pass and audit checklist for REST and DB layers`

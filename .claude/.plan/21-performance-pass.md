@@ -65,7 +65,3 @@ reintroduced a loop query.
 - Query Monitor shows no duplicate queries on the dashboard screen.
 - Doubling the dataset to 1 000 posts does not increase the per-request query
   count (only row count/time).
-
-## Commit
-
-`perf: batch reviewer, meta and activity lookups to remove dashboard N+1`

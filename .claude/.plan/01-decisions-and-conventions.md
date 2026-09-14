@@ -116,6 +116,16 @@ REST **writes** go through our controller, not core's meta endpoint: the
 state machine cannot be bypassed. (Reviewer/due date allow authorized direct
 writes.)
 
+Hardening added in step 08 (beyond the table above):
+- All three fields use REST schema `context: [ 'edit' ]`, so reviewer id, due
+  date and status never appear in the public `view` context of published posts.
+- `_sit_cwm_status` is also locked via `map_meta_cap` (`add_/edit_/delete_post_meta`
+  → `do_not_allow`), because multisite super admins bypass `auth_callback`.
+- Reviewer sanitizing rejects negative ids instead of `absint()`-flipping them
+  onto a real user.
+- Meta only shows in core REST for post types supporting `custom-fields`; the
+  plugin's own `sit-cwm/v1` routes do not depend on that.
+
 ## D7 — Enabled post types
 
 Option `sit_cwm_settings` (array), key `post_types`, default `[ 'post', 'page' ]`.
@@ -178,5 +188,14 @@ decision, receives the computed bool + context), `sit_cwm_enabled_post_types`,
 - `Requires at least: 6.5`, `Requires PHP: 7.4`, `Tested up to: 6.7`.
 - Plugin version `1.0.0` in the header, `SIT_CWM_VERSION`, and `package.json` —
   kept in lockstep, bumped only in step 23.
-- Build: `@wordpress/scripts`. Source `src/`, output `assets/build/` (committed
-  so the plugin runs from a clone without `npm install`).
+- Build: `@wordpress/scripts`. Source `src/`, output `assets/build/` (tracked in
+  git, not ignored, so the plugin runs from a clone without `npm install`).
+- JS lint config is **flat `eslint.config.js`**, not `.eslintrc.js` (step 13
+  deviation): `@wordpress/scripts` 35 ships ESLint 10, which ignores eslintrc
+  files. It spreads `@wordpress/scripts/config/eslint.config.cjs`.
+- PHP enqueues go through `Sit_Cwm\Core\Assets` only (step 13): it reads each
+  entry's `*.asset.php`, uses handles `sit-cwm-{entry}-js` / `sit-cwm-{entry}-css`,
+  and prints the `window.sitCwm` bootstrap
+  (`restNamespace, statuses, capabilities, postTypes, adminUrl`) with
+  `wp_add_inline_script`. `capabilities` comes from
+  `PermissionManager::capability_flags()` and is a UI hint only.

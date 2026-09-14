@@ -66,7 +66,3 @@ Integration tests with real roles (`self::factory()->user->create`):
   (proves Pro can tighten rules) but **cannot** be the only gate — a test
   asserts a `true`-returning filter is still applied after, i.e. Pro can widen
   deliberately; document this in ARCHITECTURE.md.
-
-## Commit
-
-`feat(workflow): add custom capabilities and centralised PermissionManager`

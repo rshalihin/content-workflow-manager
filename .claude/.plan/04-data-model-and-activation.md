@@ -58,7 +58,3 @@ tests/php/integration/DatabaseTest.php
 - Running `install()` twice changes nothing (dbDelta idempotent).
 - Bumping `SIT_CWM_DB_VERSION` triggers one upgrade run, then stops.
 - `Settings::update()` rejects a non-existent post type and a non-array payload.
-
-## Commit
-
-`feat(core): add activity table schema, versioned installer and settings store`

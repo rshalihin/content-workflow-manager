@@ -1,0 +1,82 @@
+/**
+ * Workflow comment form. Rendered only when the user may comment.
+ */
+
+/**
+ * WordPress dependencies
+ */
+import { Button, Notice, TextareaControl } from '@wordpress/components';
+import { useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
+
+/**
+ * Longest accepted comment (mirrors `ActivityController::MESSAGE_MAX_LENGTH`).
+ *
+ * @type {number}
+ */
+const MAX_LENGTH = 5000;
+
+/**
+ * @param {Object}   props          Props.
+ * @param {Function} props.onSubmit Receives the message; resolves to `null` on
+ *                                  success or a normalized error.
+ * @param {boolean}  props.isSaving Whether a workflow change is in flight.
+ * @return {Element} Form.
+ */
+export default function CommentForm( { onSubmit, isSaving } ) {
+	const [ message, setMessage ] = useState( '' );
+	const [ error, setError ] = useState( null );
+
+	const isEmpty = message.trim() === '';
+
+	const handleSubmit = async ( event ) => {
+		event.preventDefault();
+
+		if ( isEmpty || isSaving ) {
+			return;
+		}
+
+		setError( null );
+
+		const err = await onSubmit( message );
+
+		if ( err ) {
+			if ( err.message ) {
+				setError( err );
+			}
+
+			return;
+		}
+
+		setMessage( '' );
+	};
+
+	return (
+		<form className="sit-cwm-comment-form" onSubmit={ handleSubmit }>
+			<TextareaControl
+				label={ __( 'Add a workflow comment', 'sit-cwm' ) }
+				value={ message }
+				onChange={ setMessage }
+				rows={ 3 }
+				maxLength={ MAX_LENGTH }
+			/>
+			{ error && (
+				<Notice
+					status="error"
+					isDismissible
+					onRemove={ () => setError( null ) }
+				>
+					{ error.message }
+				</Notice>
+			) }
+			<Button
+				type="submit"
+				variant="secondary"
+				disabled={ isEmpty || isSaving }
+				isBusy={ isSaving && ! isEmpty }
+			>
+				{ __( 'Add comment', 'sit-cwm' ) }
+			</Button>
+		</form>
+	);
+}

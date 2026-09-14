@@ -12,4 +12,7 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# NOTE: assets/build/ is intentionally committed (D11).
+# NOTE: assets/build/ is deliberately NOT ignored (D11). The compiled JS/CSS
+# and their *.asset.php dependency files are committed so the plugin runs from
+# a git clone or release zip without `npm install && npm run build`. Rebuild
+# with `npm run build` and commit the output together with the src/ change.

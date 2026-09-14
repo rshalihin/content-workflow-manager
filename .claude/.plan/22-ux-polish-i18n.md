@@ -64,7 +64,7 @@ trigger.
   every placeholder string; `_n()` for counts; `_x()` where context disambiguates
   (e.g. "Draft" the status vs. the verb).
 - `wp_set_script_translations()` called for both bundles (step 13).
-- Generate `languages/sit-cwm.pot` via `npm run makepot`; commit it.
+- Generate `languages/sit-cwm.pot` via `npm run makepot`; keep it tracked in git.
 - Dates rendered with `dateI18n`/`date_i18n` and the site timezone, never
   hard-coded formats.
 - RTL: run `wp-scripts build` with RTL CSS generation and verify the sidebar and
@@ -86,7 +86,3 @@ trigger.
   (spot-check by grepping for quoted strings in JSX without `__(`).
 - Keyboard-only pass completes the full editorial flow.
 - No accessibility errors in an axe scan of the dashboard screen.
-
-## Commit
-
-`feat(ux): add loading, empty and error states, confirmations, a11y and i18n polish`

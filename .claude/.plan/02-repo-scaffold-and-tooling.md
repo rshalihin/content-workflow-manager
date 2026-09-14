@@ -64,7 +64,3 @@ includes/  admin/  src/  assets/  tests/php/  tests/js/  tests/e2e/   (+ .gitkee
 - Activating the (still inert) plugin in `wp-env` produces no notices with
   `WP_DEBUG` and `WP_DEBUG_DISPLAY` on.
 - `php -l` clean on every PHP file.
-
-## Commit
-
-`chore: scaffold plugin skeleton, composer, phpcs and phpunit config`

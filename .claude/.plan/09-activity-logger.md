@@ -72,7 +72,3 @@ tests/php/integration/ActivityLoggerTest.php
 - Attempted SQL injection via `$args['order'] = '1; DROP TABLE'` is ignored.
 - Permanently deleting a post removes its rows; trashing does not.
 - `get_for_posts( range( 1, 50 ) )` executes exactly one query.
-
-## Commit
-
-`feat(activity): add ActivityLogger with prepared queries and entry value object`

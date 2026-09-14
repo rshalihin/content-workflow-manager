@@ -28,6 +28,7 @@ if ( ! $sit_cwm_integration ) {
 	}
 
 	require_once $sit_cwm_root . '/vendor/autoload.php';
+	require_once __DIR__ . '/stubs/wordpress.php';
 	return;
 }
 

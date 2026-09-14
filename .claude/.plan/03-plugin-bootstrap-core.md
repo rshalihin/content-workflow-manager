@@ -67,7 +67,3 @@ final class Plugin {
   clear `InvalidArgumentException`.
 - Unit test: container memoisation + `Plugin::boot()` registers the expected
   hook set (assert via `has_action()` in an integration test).
-
-## Commit
-
-`feat(core): add plugin bootstrap, service container and lifecycle hooks`

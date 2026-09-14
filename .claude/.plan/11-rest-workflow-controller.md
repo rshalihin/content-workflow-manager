@@ -86,7 +86,3 @@ REST integration tests via `rest_do_request()`:
 - Route list assertion: every registered `sit-cwm/v1` route has a
   `permission_callback` that is not `__return_true` (loop
   `rest_get_server()->get_routes()` — this test also guards steps 12 and 17).
-
-## Commit
-
-`feat(rest): add workflow REST controller with strict schema and permissions`
