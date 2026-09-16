@@ -74,6 +74,7 @@ const FILTER_KEYS = {
 	author: 'author',
 	post_type: 'type',
 	due_date: 'due',
+	is_overdue: 'overdue',
 };
 
 /**
@@ -89,6 +90,13 @@ const LIST_OPERATORS = [ 'isAny', 'between' ];
  * @type {string[]}
  */
 const INTEGER_FIELDS = [ 'reviewer', 'author' ];
+
+/**
+ * Fields whose only value is `true`.
+ *
+ * @type {string[]}
+ */
+const BOOLEAN_FIELDS = [ 'is_overdue' ];
 
 /**
  * Every query string key this module owns.
@@ -218,6 +226,10 @@ function parseFilterValue( field, operator, raw ) {
 
 	if ( INTEGER_FIELDS.includes( field ) ) {
 		return /^\d+$/.test( raw ) ? parseInt( raw, 10 ) : null;
+	}
+
+	if ( BOOLEAN_FIELDS.includes( field ) ) {
+		return raw === 'true' ? true : null;
 	}
 
 	return raw;

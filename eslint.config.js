@@ -17,4 +17,10 @@ module.exports = [
 		...config,
 		files: [ 'tests/js/**/*.{js,jsx}' ],
 	} ) ),
+
+	// Playwright rules for the end-to-end specs under tests/e2e/.
+	...wpPlugin.configs[ 'test-playwright' ].map( ( config ) => ( {
+		...config,
+		files: [ 'tests/e2e/**/*.js' ],
+	} ) ),
 ];

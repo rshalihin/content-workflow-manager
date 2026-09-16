@@ -167,7 +167,7 @@ final class UserControllerTest extends WP_UnitTestCase {
 		$this->assertContains( $review_only, $unscoped );
 		$this->assertNotContains( $review_only, $scoped );
 		$this->assertContains( $editor, $scoped );
-		$this->assert_error_response( $this->get_users( array( 'post_id' => 999999 ) ), 'sit_cwm_invalid_post', 404 );
+		$this->assert_error_response( $this->get_users( array( 'post_id' => 999999 ) ), 'sit_cwm_not_managed', 404 );
 	}
 
 	/**

@@ -16,6 +16,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import ModalActions from './ModalActions';
 import useRowMutation from './useRowMutation';
 import { addComment, updateWorkflow } from '../../api/client';
+import { getTransitionConfirmation } from '../../utils/confirmations';
 
 /**
  * Comment field.
@@ -89,6 +90,7 @@ export default function TransitionModal( {
 	}
 
 	const title = item.title || __( '(no title)', 'sit-cwm' );
+	const { message: explanation } = getTransitionConfirmation( transition );
 
 	const submit = ( event ) => {
 		event.preventDefault();
@@ -143,6 +145,7 @@ export default function TransitionModal( {
 					transition.label
 				) }
 			</p>
+			{ explanation && <p>{ explanation }</p> }
 
 			{ withComment && (
 				<DataForm

@@ -184,6 +184,11 @@ const FILTERS = {
 			return { due_after: from, due_before: to };
 		},
 	},
+	// "Overdue only": computed by the server against the site timezone.
+	is_overdue: {
+		is: ( value ) =>
+			value === true || value === 'true' ? { overdue: true } : null,
+	},
 };
 
 /**
@@ -261,10 +266,12 @@ export function viewToQuery( view = {} ) {
  *
  * `isLoading` is true while a new query loads. `refresh()` refetches the same
  * query in the background and swaps the rows in place, so the table does not
- * blank out after a row action. Outdated requests are aborted.
+ * blank out after a row action; `isRefreshing` is true meanwhile. A failed
+ * background refresh keeps the rows already shown. Outdated requests are
+ * aborted.
  *
  * @param {Object} query REST query from `viewToQuery()`.
- * @return {{records: Object[], totalItems: number, totalPages: number, isLoading: boolean, error: ?Object, refresh: Function}} Result.
+ * @return {{records: Object[], totalItems: number, totalPages: number, isLoading: boolean, isRefreshing: boolean, error: ?Object, refresh: Function}} Result.
  */
 export default function usePosts( query ) {
 	const [ page, setPage ] = useState( {
@@ -273,6 +280,7 @@ export default function usePosts( query ) {
 		totalPages: 0,
 	} );
 	const [ isLoading, setIsLoading ] = useState( true );
+	const [ isRefreshing, setIsRefreshing ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ version, setVersion ] = useState( 0 );
 	const lastKeyRef = useRef( null );
@@ -282,11 +290,14 @@ export default function usePosts( query ) {
 
 	useEffect( () => {
 		const controller = new window.AbortController();
+		const isNewQuery = lastKeyRef.current !== key;
 
-		if ( lastKeyRef.current !== key ) {
+		if ( isNewQuery ) {
 			lastKeyRef.current = key;
 			setIsLoading( true );
 		}
+
+		setIsRefreshing( ! isNewQuery );
 
 		getPosts( JSON.parse( key ), { signal: controller.signal } )
 			.then( ( result ) => {
@@ -299,13 +310,23 @@ export default function usePosts( query ) {
 			} )
 			.catch( ( err ) => {
 				if ( ! isAbortError( err ) ) {
-					setPage( { records: [], totalItems: 0, totalPages: 0 } );
+					// Rows of another query would be misleading; the current
+					// query's rows stay visible above the error.
+					if ( isNewQuery ) {
+						setPage( {
+							records: [],
+							totalItems: 0,
+							totalPages: 0,
+						} );
+					}
+
 					setError( err );
 				}
 			} )
 			.finally( () => {
 				if ( ! controller.signal.aborted ) {
 					setIsLoading( false );
+					setIsRefreshing( false );
 				}
 			} );
 
@@ -314,5 +335,5 @@ export default function usePosts( query ) {
 
 	const refresh = useCallback( () => setVersion( ( v ) => v + 1 ), [] );
 
-	return { ...page, isLoading, error, refresh };
+	return { ...page, isLoading, isRefreshing, error, refresh };
 }

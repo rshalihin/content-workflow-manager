@@ -5,15 +5,16 @@
 /**
  * WordPress dependencies
  */
-import { Notice } from '@wordpress/components';
+import { Button, Notice, Spinner } from '@wordpress/components';
 import { DataViews } from '@wordpress/dataviews';
-import { useEffect, useMemo, useState } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import buildActions from './actions';
+import BulkActions from './bulk/BulkActions';
 import buildFields, { mergeUsers } from './fields';
 import {
 	DEFAULT_LAYOUTS,
@@ -22,6 +23,7 @@ import {
 	viewFromSearchParams,
 	viewToSearchParams,
 } from './urlState';
+import useBulkAction from '../hooks/useBulkAction';
 import usePosts, { PER_PAGE_SIZES, viewToQuery } from '../hooks/usePosts';
 import useUsers from '../hooks/useUsers';
 import { getBootstrap } from '../utils/format';
@@ -40,6 +42,34 @@ const CONFIG = { perPageSizes: PER_PAGE_SIZES };
  * @return {string} Post id.
  */
 const getItemId = ( item ) => String( item.post_id );
+
+/**
+ * WordPress' mobile admin breakpoint.
+ *
+ * @type {string}
+ */
+const SMALL_SCREEN_QUERY = '(max-width: 782px)';
+
+/**
+ * The view to start from: the URL's, with the grid layout as the default on
+ * small screens when the URL does not name a layout.
+ *
+ * @return {Object} DataViews view.
+ */
+function getInitialView() {
+	const { search } = window.location;
+	const view = viewFromSearchParams( search );
+
+	if (
+		! new URLSearchParams( search ).has( 'layout' ) &&
+		typeof window.matchMedia === 'function' &&
+		window.matchMedia( SMALL_SCREEN_QUERY ).matches
+	) {
+		return { ...view, ...DEFAULT_LAYOUTS.grid, type: 'grid' };
+	}
+
+	return view;
+}
 
 /**
  * Whether the bootstrap says the user may list reviewers. A UI hint to skip a
@@ -106,6 +136,12 @@ function EmptyState() {
 	return (
 		<div className="sit-cwm-dashboard-empty">
 			<p>{ __( 'No content is in the workflow yet.', 'sit-cwm' ) }</p>
+			<p className="sit-cwm-dashboard-empty-hint">
+				{ __(
+					'Content of the workflow-enabled post types appears here as soon as it is created.',
+					'sit-cwm'
+				) }
+			</p>
 			{ href && (
 				<a className="button button-primary" href={ href }>
 					{ sprintf(
@@ -120,20 +156,70 @@ function EmptyState() {
 }
 
 /**
+ * Shown when a search or filter matches nothing.
+ *
+ * @param {Object}   props         Props.
+ * @param {Function} props.onClear Clears the search and filters.
+ * @return {Element} Empty state.
+ */
+function NoMatches( { onClear } ) {
+	return (
+		<div className="sit-cwm-dashboard-empty">
+			<p>
+				{ __(
+					'No content matches the current search and filters.',
+					'sit-cwm'
+				) }
+			</p>
+			<Button __next40pxDefaultSize variant="secondary" onClick={ onClear }>
+				{ __( 'Clear all filters', 'sit-cwm' ) }
+			</Button>
+		</div>
+	);
+}
+
+/**
+ * Shown in place of the rows when the page could not be loaded; the error
+ * notice above the table carries the reason and the Retry action.
+ *
+ * @return {Element} Empty state.
+ */
+function LoadFailed() {
+	return (
+		<div className="sit-cwm-dashboard-empty">
+			<p>{ __( 'Content could not be loaded.', 'sit-cwm' ) }</p>
+		</div>
+	);
+}
+
+/**
  * @return {Element} Dashboard table.
  */
 export default function WorkflowDataViews() {
-	const [ view, setView ] = useState( () =>
-		viewFromSearchParams( window.location.search )
-	);
+	const [ view, setView ] = useState( getInitialView );
+	const [ selection, setSelection ] = useState( [] );
 	const query = useMemo( () => viewToQuery( view ), [ view ] );
-	const { records, totalItems, totalPages, isLoading, error, refresh } =
-		usePosts( query );
+	const {
+		records,
+		totalItems,
+		totalPages,
+		isLoading,
+		isRefreshing,
+		error,
+		refresh,
+	} = usePosts( query );
 	const { users } = useUsers( {
 		perPage: 100,
 		enabled: canListReviewers(),
 	} );
 	const known = useKnownUsers( records );
+
+	// After every batch: refetch the page and start from an empty selection.
+	const onBulkComplete = useCallback( () => {
+		refresh();
+		setSelection( [] );
+	}, [ refresh ] );
+	const bulk = useBulkAction( { onComplete: onBulkComplete } );
 
 	const fields = useMemo(
 		() =>
@@ -144,8 +230,12 @@ export default function WorkflowDataViews() {
 		[ users, known ]
 	);
 	const actions = useMemo(
-		() => buildActions( { onChanged: refresh } ),
-		[ refresh ]
+		() =>
+			buildActions( {
+				onChanged: refresh,
+				isBulkRunning: bulk.isRunning,
+			} ),
+		[ refresh, bulk.isRunning ]
 	);
 
 	// Reflect the view in the URL so a filtered dashboard is linkable.
@@ -168,12 +258,29 @@ export default function WorkflowDataViews() {
 		}
 	}, [ isLoading, totalPages, view.page ] );
 
+	const clearFilters = () =>
+		setView( ( current ) => ( {
+			...current,
+			search: '',
+			filters: [],
+			page: 1,
+		} ) );
+
 	const isDefaultView =
 		viewToSearchParams( view ).toString() === '' &&
 		view.type === DEFAULT_VIEW.type;
+	const isFiltered = hasActiveQuery( view );
+
+	let empty = <EmptyState />;
+
+	if ( error ) {
+		empty = <LoadFailed />;
+	} else if ( isFiltered ) {
+		empty = <NoMatches onClear={ clearFilters } />;
+	}
 
 	return (
-		<>
+		<BulkActions bulk={ bulk } onChanged={ refresh }>
 			{ error && (
 				<Notice
 					className="sit-cwm-dashboard-error"
@@ -186,25 +293,44 @@ export default function WorkflowDataViews() {
 					{ error.message }
 				</Notice>
 			) }
+			{ ( isFiltered || isRefreshing ) && (
+				<div className="sit-cwm-dashboard-toolbar">
+					{ isRefreshing && (
+						<span className="sit-cwm-dashboard-refreshing">
+							<Spinner />
+							{ __( 'Refreshing…', 'sit-cwm' ) }
+						</span>
+					) }
+					{ isFiltered && (
+						<Button
+							__next40pxDefaultSize
+							variant="tertiary"
+							onClick={ clearFilters }
+						>
+							{ __( 'Clear all filters', 'sit-cwm' ) }
+						</Button>
+					) }
+				</div>
+			) }
 			<DataViews
 				data={ records }
 				fields={ fields }
 				view={ view }
 				onChangeView={ setView }
 				actions={ actions }
+				selection={ selection }
+				onChangeSelection={ setSelection }
 				paginationInfo={ { totalItems, totalPages } }
 				defaultLayouts={ DEFAULT_LAYOUTS }
 				getItemId={ getItemId }
 				isLoading={ isLoading }
 				config={ CONFIG }
 				searchLabel={ __( 'Search content', 'sit-cwm' ) }
-				empty={
-					hasActiveQuery( view ) || error ? undefined : <EmptyState />
-				}
+				empty={ empty }
 				onReset={
 					isDefaultView ? false : () => setView( DEFAULT_VIEW )
 				}
 			/>
-		</>
+		</BulkActions>
 	);
 }

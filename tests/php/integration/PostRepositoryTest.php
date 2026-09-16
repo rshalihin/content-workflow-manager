@@ -103,6 +103,22 @@ final class PostRepositoryTest extends WP_UnitTestCase {
 		$this->statuses->flush();
 
 		$this->assertSame( 'draft', $this->posts->get_status( $post ) );
+		$this->assertTrue( $this->posts->has_unknown_status( $post ) );
+	}
+
+	/**
+	 * Unset and registered statuses are not reported as unknown.
+	 *
+	 * @return void
+	 */
+	public function test_has_unknown_status_is_false_for_unset_and_registered() {
+		$post = self::factory()->post->create();
+
+		$this->assertFalse( $this->posts->has_unknown_status( $post ) );
+
+		$this->posts->set_status( $post, 'review' );
+
+		$this->assertFalse( $this->posts->has_unknown_status( $post ) );
 	}
 
 	/**

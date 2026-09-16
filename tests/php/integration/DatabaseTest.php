@@ -58,9 +58,19 @@ final class DatabaseTest extends WP_UnitTestCase {
 	 * @return void
 	 */
 	public static function tear_down_after_class() {
+		global $wpdb;
+
 		parent::tear_down_after_class();
 
-		// Runs after the test case removed its temporary-table query filters.
+		/*
+		 * Runs after the test case removed its temporary-table query filters.
+		 * The last test may still have left a temporary table of that name
+		 * alive on this connection; dbDelta would find it and create nothing,
+		 * and the next class's reconnect would then drop it, leaving every
+		 * later test without an activity table.
+		 */
+		$wpdb->query( 'DROP TEMPORARY TABLE IF EXISTS ' . ( new Database() )->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- Test fixture; name from table_name().
+
 		( new Database() )->install();
 	}
 

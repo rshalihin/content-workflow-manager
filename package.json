@@ -13,18 +13,22 @@
     "format": "wp-scripts format",
     "test:unit": "wp-scripts test-unit-js",
     "test:e2e": "wp-scripts test-playwright",
+    "test:e2e:local": "node bin/e2e-local.js",
     "env:start": "wp-env start",
-    "makepot": "wp i18n make-pot . languages/sit-cwm.pot --domain=sit-cwm"
+    "makepot": "wp i18n make-pot . languages/sit-cwm.pot --domain=sit-cwm --exclude=tests,bin,artifacts,.github,.claude"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
+    "@wordpress/a11y": "^4.55.0",
     "@wordpress/api-fetch": "^7.55.0",
     "@wordpress/components": "^40.1.0",
     "@wordpress/compose": "^8.8.0",
     "@wordpress/data": "^10.55.0",
     "@wordpress/dataviews": "^19.0.0",
     "@wordpress/date": "^5.55.0",
+    "@wordpress/e2e-test-utils-playwright": "^2.0.0",
     "@wordpress/edit-post": "^8.55.0",
     "@wordpress/editor": "^15.0.0",
     "@wordpress/element": "^8.7.0",

@@ -8,26 +8,32 @@
 /**
  * WordPress dependencies
  */
-import { Button, Modal } from '@wordpress/components';
-import { useState } from '@wordpress/element';
+import { Button } from '@wordpress/components';
+import { useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
-import { getStatusDefinition } from '../../utils/format';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import {
+	getTransitionConfirmation,
+	requiresConfirmation,
+} from '../../utils/confirmations';
+
+export { requiresConfirmation };
 
 /**
- * Whether a transition asks for confirmation: rollbacks, and moves into a
- * final status (Published).
+ * Button label of a transition.
  *
- * @param {Object} transition `{ slug, label, is_forward, is_rollback }`.
- * @return {boolean} True when a confirm dialog is shown first.
+ * @param {Object} transition `{ slug, label }`.
+ * @return {string} Label.
  */
-export function requiresConfirmation( transition ) {
-	return (
-		!! transition.is_rollback ||
-		!! getStatusDefinition( transition.slug )?.is_final
+function actionLabel( transition ) {
+	return sprintf(
+		/* translators: %s: Target workflow status label. */
+		__( 'Move to %s', 'sit-cwm' ),
+		transition.label
 	);
 }
 
@@ -36,26 +42,49 @@ export function requiresConfirmation( transition ) {
  * @param {Object[]} props.transitions  Available transitions.
  * @param {Function} props.onTransition Receives the target status slug.
  * @param {boolean}  props.isSaving     Whether a workflow change is in flight.
+ * @param {boolean}  [props.isDisabled] Disables every action (e.g. post gone).
  * @return {Element} Actions.
  */
 export default function TransitionActions( {
 	transitions,
 	onTransition,
 	isSaving,
+	isDisabled = false,
 } ) {
 	const [ pending, setPending ] = useState( null );
 	const [ activeSlug, setActiveSlug ] = useState( null );
+	const groupRef = useRef( null );
 
 	if ( ! Array.isArray( transitions ) || transitions.length === 0 ) {
 		return (
 			<p className="sit-cwm-help">
 				{ __(
-					'No workflow actions are available to you right now.',
+					'No workflow actions are available to you right now. The actions offered depend on the current status and your role.',
 					'sit-cwm'
 				) }
 			</p>
 		);
 	}
+
+	// The clicked button is disabled while saving and may be replaced once the
+	// status changes; keep keyboard focus in the actions rather than on <body>.
+	const restoreFocus = () => {
+		window.requestAnimationFrame( () => {
+			const group = groupRef.current;
+
+			if ( ! group ) {
+				return;
+			}
+
+			const { activeElement, body } = group.ownerDocument;
+
+			if ( activeElement && activeElement !== body ) {
+				return;
+			}
+
+			( group.querySelector( 'button:not([disabled])' ) || group ).focus();
+		} );
+	};
 
 	const run = async ( transition ) => {
 		setActiveSlug( transition.slug );
@@ -64,22 +93,20 @@ export default function TransitionActions( {
 			await onTransition( transition.slug );
 		} finally {
 			setActiveSlug( null );
+			restoreFocus();
 		}
 	};
 
-	const actionLabel = ( transition ) =>
-		sprintf(
-			/* translators: %s: Target workflow status label. */
-			__( 'Move to %s', 'sit-cwm' ),
-			transition.label
-		);
+	const confirmation = pending ? getTransitionConfirmation( pending ) : null;
 
 	return (
 		<>
 			<div
+				ref={ groupRef }
 				className="sit-cwm-actions"
 				role="group"
 				aria-label={ __( 'Workflow actions', 'sit-cwm' ) }
+				tabIndex={ -1 }
 			>
 				{ transitions.map( ( transition ) => (
 					<Button
@@ -89,7 +116,7 @@ export default function TransitionActions( {
 						}
 						isDestructive={ !! transition.is_rollback }
 						isBusy={ activeSlug === transition.slug }
-						disabled={ isSaving }
+						disabled={ isSaving || isDisabled }
 						onClick={ () =>
 							requiresConfirmation( transition )
 								? setPending( transition )
@@ -101,48 +128,21 @@ export default function TransitionActions( {
 				) ) }
 			</div>
 
-			{ pending && (
-				<Modal
-					className="sit-cwm-confirm"
-					title={ sprintf(
-						/* translators: %s: Target workflow status label. */
-						__( 'Move to %s?', 'sit-cwm' ),
-						pending.label
-					) }
-					onRequestClose={ () => setPending( null ) }
-				>
-					<p>
-						{ pending.is_rollback
-							? __(
-									'This sends the content back to an earlier workflow stage.',
-									'sit-cwm'
-							  )
-							: __(
-									'This completes the workflow cycle for this content.',
-									'sit-cwm'
-							  ) }
-					</p>
-					<div className="sit-cwm-confirm-actions">
-						<Button
-							variant="tertiary"
-							onClick={ () => setPending( null ) }
-						>
-							{ __( 'Cancel', 'sit-cwm' ) }
-						</Button>
-						<Button
-							variant="primary"
-							isDestructive={ !! pending.is_rollback }
-							onClick={ () => {
-								const transition = pending;
+			{ confirmation && (
+				<ConfirmDialog
+					title={ confirmation.title }
+					confirmLabel={ confirmation.confirmLabel }
+					isDestructive={ confirmation.isDestructive }
+					onCancel={ () => setPending( null ) }
+					onConfirm={ () => {
+						const transition = pending;
 
-								setPending( null );
-								run( transition );
-							} }
-						>
-							{ actionLabel( pending ) }
-						</Button>
-					</div>
-				</Modal>
+						setPending( null );
+						run( transition );
+					} }
+				>
+					{ confirmation.message && <p>{ confirmation.message }</p> }
+				</ConfirmDialog>
 			) }
 		</>
 	);

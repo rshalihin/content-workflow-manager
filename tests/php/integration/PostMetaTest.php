@@ -75,6 +75,10 @@ final class PostMetaTest extends WP_UnitTestCase {
 		$this->posts = new PostRepository( $statuses, $settings );
 		$this->meta  = new PostMeta( $statuses, new PermissionManager( $this->posts, $settings ), $this->posts, $settings );
 
+		// WP_UnitTestCase::tear_down() unregisters every meta key, so the
+		// registration the plugin did on `init` has to be repeated per test.
+		$this->meta->register_meta();
+
 		$this->reset_rest_server();
 	}
 
@@ -98,7 +102,7 @@ final class PostMetaTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The booted plugin registered all three keys for the default types.
+	 * Registration covers all three keys for both default post types.
 	 *
 	 * @return void
 	 */
@@ -350,6 +354,12 @@ final class PostMetaTest extends WP_UnitTestCase {
 	 */
 	private function reset_rest_server() {
 		global $wp_rest_server;
+
+		// Post types cache their REST controller and controllers cache their
+		// schema, so registering or unregistering meta is invisible without this.
+		foreach ( get_post_types( array(), 'objects' ) as $post_type ) {
+			$post_type->rest_controller = null;
+		}
 
 		$wp_rest_server = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Core global; reset for test isolation.
 	}

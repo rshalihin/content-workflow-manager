@@ -211,12 +211,19 @@ class PostsController extends AbstractController {
 				),
 				'due_before'  => array_merge( $date, array( 'description' => __( 'Limit to posts due on or before this date (YYYY-MM-DD).', 'sit-cwm' ) ) ),
 				'due_after'   => array_merge( $date, array( 'description' => __( 'Limit to posts due on or after this date (YYYY-MM-DD).', 'sit-cwm' ) ) ),
+				'overdue'     => array(
+					'description'       => __( 'Limit to posts whose due date has passed, in the site timezone, before the workflow completed.', 'sit-cwm' ),
+					'type'              => 'boolean',
+					'validate_callback' => 'rest_validate_request_arg',
+					'sanitize_callback' => 'rest_sanitize_boolean',
+				),
 				'orderby'     => array(
 					'description'       => __( 'Sort column.', 'sit-cwm' ),
 					'type'              => 'string',
 					'default'           => 'date',
 					'enum'              => array( 'title', 'date', 'due_date', 'status' ),
 					'validate_callback' => 'rest_validate_request_arg',
+					'sanitize_callback' => 'sanitize_key',
 				),
 				'order'       => array(
 					'description'       => __( 'Sort direction.', 'sit-cwm' ),
@@ -224,6 +231,7 @@ class PostsController extends AbstractController {
 					'default'           => 'desc',
 					'enum'              => array( 'asc', 'desc' ),
 					'validate_callback' => 'rest_validate_request_arg',
+					'sanitize_callback' => 'sanitize_key',
 				),
 			)
 		);
@@ -286,6 +294,7 @@ class PostsController extends AbstractController {
 				'author'      => absint( $request->get_param( 'author' ) ),
 				'due_before'  => (string) $request->get_param( 'due_before' ),
 				'due_after'   => (string) $request->get_param( 'due_after' ),
+				'overdue'     => true === rest_sanitize_boolean( $request->get_param( 'overdue' ) ),
 				'orderby'     => (string) $request->get_param( 'orderby' ),
 				'order'       => (string) $request->get_param( 'order' ),
 				'page'        => (int) $request->get_param( 'page' ),
@@ -365,6 +374,11 @@ class PostsController extends AbstractController {
 				'status_label'          => array(
 					'description' => __( 'Workflow status label.', 'sit-cwm' ),
 					'type'        => 'string',
+					'readonly'    => true,
+				),
+				'status_is_unknown'     => array(
+					'description' => __( 'Whether the stored workflow status is no longer registered and the default status is reported instead.', 'sit-cwm' ),
+					'type'        => 'boolean',
 					'readonly'    => true,
 				),
 				'reviewer'              => array_merge( $summary, array( 'description' => __( 'Assigned reviewer.', 'sit-cwm' ) ) ),
@@ -492,6 +506,7 @@ class PostsController extends AbstractController {
 			),
 			'status'                => $status,
 			'status_label'          => $this->statuses->label( $status ),
+			'status_is_unknown'     => $this->posts->has_unknown_status( $post->ID ),
 			'reviewer'              => $reviewer_id > 0 && isset( $users[ $reviewer_id ] ) ? $users[ $reviewer_id ] : null,
 			'due_date'              => $due_date,
 			'is_overdue'            => '' !== $due_date && $due_date < $today && ! $this->statuses->is_final( $status ),

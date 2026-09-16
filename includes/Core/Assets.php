@@ -168,6 +168,11 @@ final class Assets {
 
 		if ( is_readable( $this->build_dir . $entry . '.css' ) ) {
 			wp_enqueue_style( $this->style_handle( $entry ), $this->build_url . $entry . '.css', array( 'wp-components' ), $asset['version'] );
+
+			// The build emits `{entry}-rtl.css`; core swaps it in for RTL locales.
+			if ( is_readable( $this->build_dir . $entry . '-rtl.css' ) ) {
+				wp_style_add_data( $this->style_handle( $entry ), 'rtl', 'replace' );
+			}
 		}
 
 		$this->add_bootstrap( $handle );

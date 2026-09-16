@@ -229,9 +229,10 @@ abstract class AbstractController extends WP_REST_Controller implements Bootable
 	/**
 	 * Resolves the `post_id` URL parameter to an accessible, managed post.
 	 *
-	 * A post that exists but is not workflow-enabled, or that the user cannot
-	 * read, yields the same `sit_cwm_not_managed` 404, so a response never
-	 * confirms that a hidden post exists (step 20.2).
+	 * A post that does not exist, is not workflow-enabled, or that the user
+	 * cannot read yields the identical `sit_cwm_not_managed` 404 (code, message
+	 * and status), so a response never distinguishes a hidden post from a
+	 * missing id (step 20.2).
 	 *
 	 * @since 1.0.0
 	 *
@@ -242,15 +243,7 @@ abstract class AbstractController extends WP_REST_Controller implements Bootable
 		$post_id = absint( $request->get_param( 'post_id' ) );
 		$post    = $post_id > 0 ? get_post( $post_id ) : null;
 
-		if ( ! $post instanceof WP_Post ) {
-			return new WP_Error(
-				'sit_cwm_invalid_post',
-				__( 'No content was found with this ID.', 'sit-cwm' ),
-				array( 'status' => 404 )
-			);
-		}
-
-		if ( ! $this->posts->is_managed( $post->ID ) || ! $this->permissions->can_read_post( $post->ID ) ) {
+		if ( ! $post instanceof WP_Post || ! $this->posts->is_managed( $post->ID ) || ! $this->permissions->can_read_post( $post->ID ) ) {
 			return new WP_Error(
 				'sit_cwm_not_managed',
 				__( 'No workflow was found for this content.', 'sit-cwm' ),

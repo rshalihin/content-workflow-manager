@@ -51,7 +51,9 @@ function mergeById( current, incoming ) {
  * @param {number}  [options.perPage] Entries per page.
  * @param {number}  [options.version] Reloads page 1 when it changes.
  * @param {boolean} [options.enabled] Set false to skip fetching entirely.
- * @return {Object} `{ items, isLoading, error, hasMore, loadMore, refresh, retry }`.
+ *                                    `isRefreshing` is true while page 1 reloads behind entries already shown.
+ *
+ * @return {Object} `{ items, isLoading, isRefreshing, error, hasMore, loadMore, refresh, retry }`.
  */
 export default function useActivity(
 	postId,
@@ -62,6 +64,7 @@ export default function useActivity(
 	const [ page, setPage ] = useState( 0 );
 	const [ totalPages, setTotalPages ] = useState( 0 );
 	const [ isLoading, setIsLoading ] = useState( isActive );
+	const [ loadingPage, setLoadingPage ] = useState( 0 );
 	const [ error, setError ] = useState( null );
 	const [ resetCount, setResetCount ] = useState( 0 );
 
@@ -80,6 +83,7 @@ export default function useActivity(
 
 			controllerRef.current = controller;
 			setIsLoading( true );
+			setLoadingPage( nextPage );
 			setError( null );
 
 			try {
@@ -169,6 +173,7 @@ export default function useActivity(
 	return {
 		items,
 		isLoading,
+		isRefreshing: isLoading && loadingPage === 1 && items.length > 0,
 		error,
 		hasMore: page > 0 && page < totalPages,
 		loadMore,

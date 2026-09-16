@@ -15,7 +15,8 @@ npm run lint:js     # ESLint (flat config, @wordpress/eslint-plugin)
 npm run lint:css    # stylelint
 npm run format      # wp-prettier
 npm run test:unit   # Jest, tests/js/
-npm run test:e2e    # Playwright (needs @playwright/test, added with the e2e step)
+npm run test:e2e    # Playwright against wp-env (Docker)
+npm run test:e2e:local # Playwright against a local site (Laragon, no Docker)
 npm run env:start   # wp-env (WordPress 6.7, PHP 7.4)
 npm run makepot     # needs wp-cli on PATH
 ```
@@ -67,6 +68,47 @@ an empty React root. `src/dashboard/` renders `@wordpress/dataviews` over
   imported from JS: it is named `style.css`, which `@wordpress/scripts` would
   split into an unloaded `style-dashboard.css` chunk.
 
+### Bulk actions and filters
+
+- Rows are selectable (`selection` / `onChangeSelection`). **Change status**,
+  **Assign reviewer** and **Set due date** are `supportsBulk` actions from
+  `src/dashboard/bulk/BulkActions.jsx`. With one row, reviewer and due date
+  reuse the row modals (reviewers scoped to that post). With several rows,
+  every action calls `POST /sit-cwm/v1/posts/batch` through
+  `src/hooks/useBulkAction.js`.
+- `useBulkAction()` reconciles the response with the ids it sent: an id the
+  server did not account for counts as failed, so a partial batch is never
+  reported as a success. Double submits are ignored. After every batch the
+  page is refetched and the selection cleared, and a notice summarizes the
+  result (`_n()`-pluralized) with an expandable list of failures and reasons.
+- Moves to `published`, rollbacks, and clearing reviewers or due dates ask for
+  a second click that names the item count.
+- The modal components are module-level and read the runner from
+  `BulkActionContext`, so disabling the actions while a batch runs never
+  remounts an open modal.
+- **Overdue only** is a filter-only DataViews field (`is_overdue`, URL key
+  `overdue=true`) mapped to the `overdue` REST argument. The server computes it
+  in the site timezone. **Clear all filters** resets search and filters.
+- Saved views were skipped: not trivial with DataViews defaults, and custom
+  saved views are Pro.
+
+### Settings page
+
+`admin/Settings.php` adds **Content Workflow → Settings** for users with
+`sit_cwm_manage_workflows`. It uses the Settings API only: `options.php` checks
+the nonce from `settings_fields()`, and
+`option_page_capability_sit_cwm_settings_group` makes it require the plugin
+capability instead of `manage_options`. `Settings::sanitize()` is the single
+place input is trusted-ized. The setting is not exposed through
+`/wp/v2/settings`.
+
+Enabled post types come from `Core\Settings::available_post_types()` (post types
+with an admin UI, minus `attachment`, `revision`, `nav_menu_item` and every
+`wp_*` type). `Settings::update()` validates against the same list. Disabling a
+post type keeps its meta and activity rows. `Dashboard` registers an explicit
+"Dashboard" first submenu entry, so the top-level menu does not point at
+Settings.
+
 ### Enqueueing
 
 All PHP enqueues go through `Sit_Cwm\Core\Assets::enqueue( $entry )`:
@@ -97,6 +139,208 @@ with every `src/` change.
 - **Prettier:** `prettier` is aliased to `wp-prettier` in `package.json`.
   Without the alias, `@wordpress/eslint-plugin` hoists stock Prettier, which
   rejects WordPress' spaces-inside-parentheses style.
+
+## Testing
+
+| Suite | Command | Location |
+|---|---|---|
+| PHP unit (no WordPress) | `composer test` | `tests/php/unit/` |
+| PHP integration | `composer test:setup` once, then `composer test:integration` (it **drops all tables** in its database) | `tests/php/integration/` |
+| JS unit | `npm run test:unit` | `tests/js/` |
+| End-to-end | `npm run env:start`, then `npm run test:e2e` | `tests/e2e/` |
+
+### Running everything without Docker
+
+Only the end-to-end suite ever needed wp-env; the other three suites are plain
+PHP and Node. On a Laragon/MAMP/XAMPP machine the whole suite runs against the
+local Apache and MySQL:
+
+```sh
+# 1. PHP unit — no WordPress, no database.
+composer test
+
+# 2. PHP integration — needs MySQL running.
+composer test:setup          # php bin/install-wp-tests.php
+composer test:integration
+
+# 3. JS unit.
+npm run test:unit
+
+# 4. End-to-end — needs a local WordPress site serving the plugin.
+php bin/setup-e2e-site.php
+npm run test:e2e:local -- --base-url=http://flow-manager.test
+```
+
+- **PHP binary.** Use a PHP build with `mysqli`, `curl` and `zip`, for example
+  `G:/laragon/bin/php/php-8.3.33-Win32-vs16-x64/php.exe`. Composer scripts use
+  whichever PHP runs Composer.
+- **`bin/install-wp-tests.php`** is the local mirror of the CI steps that
+  download core and write `tests/php/wp-tests-config.php`. It downloads a core
+  checkout into `%LOCALAPPDATA%/sit-cwm-wp-tests/wordpress-<version>` (cached),
+  creates the `sit_cwm_tests` database, and generates the config. The default
+  version is the major.minor of the installed `wp-phpunit/wp-phpunit`: the test
+  library and core must come from the same release, so do **not** point ABSPATH
+  at a dev site running a different WordPress version. Options: `--wp`, `--dir`,
+  `--db`, `--user`, `--pass`, `--host`, `--prefix`, `--force`.
+- **`bin/setup-e2e-site.php`** prepares an existing local site: activates the
+  plugin, switches plain permalinks to post-name permalinks, writes the
+  WordPress rewrite rules to `.htaccess` (the CLI cannot detect `mod_rewrite`,
+  so WordPress skips that itself, and `/wp-json/` 404s without it), and makes
+  sure the administrator the specs log in as exists (`--admin-user`,
+  `--admin-pass`, `--reset-password`). `--path` selects the WordPress root; it
+  defaults to the site this plugin lives in.
+- **`--install`** provisions a scratch site instead: it downloads core, creates
+  the database, writes `wp-config.php` (with `WP_HOME`/`WP_SITEURL` pinned to
+  `--url`) and installs WordPress. It keeps any core files and `wp-config.php`
+  that are already there, so delete them to start over.
+
+  ```sh
+  php bin/setup-e2e-site.php --install \
+    --path=G:/laragon/www/cwm-e2e --url=http://127.0.0.1/cwm-e2e --db=cwm_e2e
+  ```
+
+  It links the plugin into the new site; when Windows refuses the symlink it
+  prints the `New-Item -ItemType Junction` command to run instead and stops.
+- **`npm run test:e2e:local`** sets `WP_BASE_URL`, `WP_USERNAME` and
+  `WP_PASSWORD` and runs Playwright without wp-env — `playwright.config.js`
+  starts wp-env only when `WP_BASE_URL` is unset. Extra arguments are passed
+  through (`-- --headed`, a spec path, …).
+- **The specs are destructive**: `deleteAllPosts()` and `deleteAllUsers()` run
+  before and after each spec file. Point them at a scratch site. For an
+  isolated one, install a second Laragon site and junction the plugin into it
+  (junctions need no elevation):
+
+  ```powershell
+  New-Item -ItemType Junction `
+    -Path   "G:\laragon\www\cwm-e2e\wp-content\plugins\content-workflow-manager" `
+    -Target "G:\laragon\www\flow-manager\wp-content\plugins\content-workflow-manager"
+  ```
+
+- Use `127.0.0.1` or a `.test` hostname rather than `localhost` if requests
+  hang: Laragon's Apache listens on IPv4 only, and `localhost` can resolve to
+  `::1`.
+
+- Order independence is a release criterion (step 19), so check it with
+  `vendor/bin/phpunit --testsuite integration --order-by=random`. Two fixtures
+  exist only to keep that true: `TestCase::set_up_before_class()` installs the
+  activity table *after* `parent::set_up_before_class()`, whose
+  `$wpdb->db_connect()` drops the previous class's temporary tables, and
+  `DatabaseTest::tear_down_after_class()` drops its leftover temporary table
+  before reinstalling the real one. Install before either, and `dbDelta()`
+  finds the temporary table, creates nothing, and the reconnect leaves the
+  class with no activity table.
+- Run the unit suite **without** `WP_PHPUNIT__TESTS_CONFIG` set (`composer
+  test` does this for you). With it set, the bootstrap loads WordPress and the
+  two `test_not_memoised_before_init` tests fail, because `init` has run.
+- `tests/php/TestCase.php` is the base for new integration tests: real
+  activity table, default capabilities, a fresh REST server per test, and
+  `create_user_with_caps()`, `create_managed_post()`,
+  `assert_activity_count()`, `assert_status()`, `rest_request()`,
+  `assert_error_response()`.
+- `tests/php/Traits/CreatesWorkflowPosts.php` creates the six-user fixture
+  (admin, editor, author, contributor, reviewer, subscriber) once per class.
+- `tests/php/integration/NegativeSuiteTest.php` is the security regression
+  suite (step 19.4); it must never be skipped or weakened.
+- `playwright.config.js` reuses the `@wordpress/scripts` preset with specs in
+  `tests/e2e/`. The specs delete the posts and users they create before and
+  after running, so they can run repeatedly against the same wp-env.
+- CI (`.github/workflows/ci.yml`) runs phpcs, PHP unit and integration tests
+  on PHP 7.4 / 8.1 / 8.3 × WordPress 6.5 / latest, then JS lint, Jest and a
+  build that must not change `assets/build/`, and E2E on a single leg with
+  artifacts uploaded on failure.
+
+### Coverage
+
+Not measured yet: it needs Xdebug or PCOV and a run of
+`vendor/bin/phpunit --testsuite integration --coverage-text`. Record the
+numbers here against the release minimums:
+
+| Area | Minimum | Measured |
+|---|---|---|
+| `includes/Workflow/` | 90 % lines, 100 % of branches in `can_transition` / `transition` | — |
+| `includes/Activity/`, `includes/Content/` | 80 % lines | — |
+| `includes/REST/` | every route: happy path, unauthenticated, unauthorized, invalid input | — |
+| JS hooks | loading / success / error each | — |
+
+## Performance
+
+The dashboard and timeline must stay flat as content grows: no reviewer,
+author or activity query per row.
+
+### Measuring
+
+```sh
+npm run env:start                          # wp-env includes Query Monitor
+npx wp-env run cli wp eval-file wp-content/plugins/content-workflow-manager/bin/seed.php 500 10 5000
+```
+
+`bin/seed.php` (dev only, export-ignored) creates reviewers, workflow posts
+with random statuses, reviewers and due dates, and activity rows spread over
+90 days. Seeded posts carry `_sit_cwm_seed`, so they can be deleted with
+`wp post delete $(wp post list --post_type=any --post_status=any --meta_key=_sit_cwm_seed --format=ids) --force`.
+
+Read REST numbers from Query Monitor's `x-qm-*` headers (log in and send the
+`wp_rest` nonce) or its admin bar panel on the dashboard page.
+
+### Budgets
+
+| Path | Budget | Measured (500 posts / 5 000 activity rows) |
+|---|---|---|
+| `GET /sit-cwm/v1/posts?per_page=100` | ≤ 8 queries, < 300 ms | — |
+| `GET /posts/<id>/workflow` | ≤ 5 queries | — |
+| `GET /posts/<id>/activity?per_page=20` | ≤ 4 queries | — |
+| `POST /posts/<id>/workflow` | ≤ 10 queries | — |
+| `POST /posts/batch` (50 posts) | linear, no per-post user query | — |
+| Dashboard first paint | < 1.5 s | — |
+
+Not measured yet: fill the column in from a seeded wp-env run.
+`tests/php/integration/PerformanceTest.php` enforces the query budgets (not
+the timings) in CI with `$wpdb->num_queries` deltas. For the collection and
+the batch it also checks that the query count does not grow with the number
+of rows.
+
+### How the hot paths stay flat
+
+- **Collection:** `PostRepository::query_posts()` runs one ids-only
+  `WP_Query` (`fields => ids`, meta and term caches off, `per_page` capped at
+  100, never `-1`). `PostsController::prepare_rows()` then loads posts and meta
+  with `_prime_post_caches()`, the last activity of every row with
+  `ActivityLogger::get_for_posts()` and every author and reviewer with one
+  `get_users()` field-list query (`UserSummaries::load()`).
+- **Batch:** `BulkProcessor::prime_caches()` loads the posts, their meta and
+  every author, reviewer, payload reviewer and the acting user
+  (`cache_users()`) before the loop. Authorization still runs per post.
+- **Meta filters:** `meta_query` keeps the most selective clause first and
+  combines at most a few clauses. Postmeta joins grow with the data, so a
+  dedicated index table (`{prefix}sit_cwm_index`: status, reviewer and due
+  date per post) is the follow-up for Pro-scale sites. It is not built in
+  v1.0.
+- **Settings:** `sit_cwm_settings` is small and autoloaded. Do not add large
+  options; the DB version option is not autoloaded.
+
+### Timeline index
+
+The timeline query must use the `post_created (post_id, created_at)` key:
+
+```sql
+EXPLAIN SELECT * FROM wp_sit_cwm_activity
+WHERE post_id = 123 ORDER BY created_at DESC, id DESC LIMIT 20 OFFSET 0;
+```
+
+Expect `type: ref`, `key: post_created`. The `id` tiebreak can add
+`Using filesort` over one post's rows only, which stays small. Record the
+output here after running it on the seeded site.
+
+### Front end
+
+- One page at a time: pagination, sorting and filtering are server-side
+  (`viewToQuery()`); nothing loads every row.
+- Search input is debounced by DataViews itself (`useDebouncedInput`, 250 ms)
+  before `onChangeView` fires. We do not add a second debounce on top of it.
+- `usePosts()` aborts the in-flight request (`AbortController`) whenever the
+  query changes.
+- `fields` and `actions` are memoized, and every cell renderer is a `memo`
+  component, so selection and hover changes do not re-render unchanged cells.
 
 ## Bundle size and `@wordpress/dataviews`
 

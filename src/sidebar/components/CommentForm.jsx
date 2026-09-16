@@ -20,10 +20,15 @@ const MAX_LENGTH = 5000;
  * @param {Object}   props          Props.
  * @param {Function} props.onSubmit Receives the message; resolves to `null` on
  *                                  success or a normalized error.
- * @param {boolean}  props.isSaving Whether a workflow change is in flight.
+ * @param {boolean}  props.isSaving     Whether a workflow change is in flight.
+ * @param {boolean}  [props.isDisabled] Disables the form (e.g. post gone).
  * @return {Element} Form.
  */
-export default function CommentForm( { onSubmit, isSaving } ) {
+export default function CommentForm( {
+	onSubmit,
+	isSaving,
+	isDisabled = false,
+} ) {
 	const [ message, setMessage ] = useState( '' );
 	const [ error, setError ] = useState( null );
 
@@ -32,7 +37,7 @@ export default function CommentForm( { onSubmit, isSaving } ) {
 	const handleSubmit = async ( event ) => {
 		event.preventDefault();
 
-		if ( isEmpty || isSaving ) {
+		if ( isEmpty || isSaving || isDisabled ) {
 			return;
 		}
 
@@ -59,6 +64,7 @@ export default function CommentForm( { onSubmit, isSaving } ) {
 				onChange={ setMessage }
 				rows={ 3 }
 				maxLength={ MAX_LENGTH }
+				disabled={ isDisabled }
 			/>
 			{ error && (
 				<Notice
@@ -72,7 +78,7 @@ export default function CommentForm( { onSubmit, isSaving } ) {
 			<Button
 				type="submit"
 				variant="secondary"
-				disabled={ isEmpty || isSaving }
+				disabled={ isEmpty || isSaving || isDisabled }
 				isBusy={ isSaving && ! isEmpty }
 			>
 				{ __( 'Add comment', 'sit-cwm' ) }

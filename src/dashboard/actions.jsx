@@ -1,5 +1,5 @@
 /**
- * Per-row DataViews actions.
+ * DataViews actions: single-row quick actions plus the bulk-capable ones.
  *
  * Every `isEligible` predicate is a UX filter only: it hides actions the row's
  * server-computed `available_transitions` and `capabilities` rule out. Each
@@ -16,35 +16,22 @@ import { pencil } from '@wordpress/icons';
 /**
  * Internal dependencies
  */
-import DueDateModal from './modals/DueDateModal';
-import ReviewerModal from './modals/ReviewerModal';
+import { buildBulkActions } from './bulk/BulkActions';
+import { canMoveTo } from './bulk/shared';
 import TransitionModal from './modals/TransitionModal';
 import { isSafeUrl } from '../utils/format';
 
-/**
- * Whether the server offered a transition to a status for a row.
- *
- * @param {Object} item Row.
- * @param {string} slug Target status slug.
- * @return {boolean} True when offered.
- */
-export function canMoveTo( item, slug ) {
-	return (
-		Array.isArray( item?.available_transitions ) &&
-		item.available_transitions.some(
-			( transition ) => transition && transition.slug === slug
-		)
-	);
-}
+export { canMoveTo };
 
 /**
- * Builds the row actions.
+ * Builds the dashboard actions.
  *
- * @param {Object}   options           Options.
- * @param {Function} options.onChanged Refetches the current page after a change.
+ * @param {Object}   options                 Options.
+ * @param {Function} options.onChanged       Refetches the current page after a change.
+ * @param {boolean}  [options.isBulkRunning] Whether a batch is running.
  * @return {Object[]} DataViews actions.
  */
-export default function buildActions( { onChanged } ) {
+export default function buildActions( { onChanged, isBulkRunning = false } ) {
 	function ApproveModal( props ) {
 		return (
 			<TransitionModal
@@ -68,14 +55,6 @@ export default function buildActions( { onChanged } ) {
 		);
 	}
 
-	function AssignReviewerModal( props ) {
-		return <ReviewerModal { ...props } onChanged={ onChanged } />;
-	}
-
-	function SetDueDateModal( props ) {
-		return <DueDateModal { ...props } onChanged={ onChanged } />;
-	}
-
 	return [
 		{
 			id: 'edit',
@@ -92,31 +71,17 @@ export default function buildActions( { onChanged } ) {
 		{
 			id: 'approve',
 			label: __( 'Approve', 'sit-cwm' ),
-			modalHeader: __( 'Approve content', 'sit-cwm' ),
+			modalHeader: __( 'Approve content?', 'sit-cwm' ),
 			isEligible: ( item ) => canMoveTo( item, 'approved' ),
 			RenderModal: ApproveModal,
 		},
 		{
 			id: 'request-changes',
 			label: __( 'Request changes', 'sit-cwm' ),
-			modalHeader: __( 'Request changes', 'sit-cwm' ),
+			modalHeader: __( 'Request changes?', 'sit-cwm' ),
 			isEligible: ( item ) => canMoveTo( item, 'needs_changes' ),
 			RenderModal: RequestChangesModal,
 		},
-		{
-			id: 'assign-reviewer',
-			label: __( 'Assign reviewer', 'sit-cwm' ),
-			modalHeader: __( 'Assign reviewer', 'sit-cwm' ),
-			isEligible: ( item ) => !! item.capabilities?.can_assign_reviewer,
-			RenderModal: AssignReviewerModal,
-		},
-		{
-			id: 'set-due-date',
-			label: __( 'Set due date', 'sit-cwm' ),
-			modalHeader: __( 'Set due date', 'sit-cwm' ),
-			modalSize: 'small',
-			isEligible: ( item ) => !! item.capabilities?.can_set_due_date,
-			RenderModal: SetDueDateModal,
-		},
+		...buildBulkActions( { isRunning: isBulkRunning } ),
 	];
 }

@@ -39,6 +39,23 @@
 		</properties>
 	</rule>
 
+	<!--
+		The Docker-free test-environment scripts in /bin run before WordPress is
+		loaded, so WP_Filesystem, the WP HTTP API and $wpdb do not exist there.
+		bin/seed.php runs inside WP-CLI and stays fully checked.
+	-->
+	<rule ref="WordPress.WP.AlternativeFunctions">
+		<exclude-pattern>/bin/install-wp-tests.php</exclude-pattern>
+		<exclude-pattern>/bin/setup-e2e-site.php</exclude-pattern>
+		<exclude-pattern>/bin/lib/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.DB.RestrictedFunctions">
+		<exclude-pattern>/bin/lib/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.DB.RestrictedClasses">
+		<exclude-pattern>/bin/lib/*</exclude-pattern>
+	</rule>
+
 	<!-- Global prefixes (D1). -->
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
 		<properties>

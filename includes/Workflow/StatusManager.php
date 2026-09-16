@@ -314,7 +314,7 @@ final class StatusManager {
 		return array(
 			'draft'         => array(
 				'slug'        => 'draft',
-				'label'       => __( 'Draft', 'sit-cwm' ),
+				'label'       => _x( 'Draft', 'workflow status', 'sit-cwm' ),
 				'description' => __( 'Not yet started in the workflow.', 'sit-cwm' ),
 				'color'       => '#757575',
 				'order'       => 10,
@@ -322,7 +322,7 @@ final class StatusManager {
 			),
 			'writing'       => array(
 				'slug'        => 'writing',
-				'label'       => __( 'Writing', 'sit-cwm' ),
+				'label'       => _x( 'Writing', 'workflow status', 'sit-cwm' ),
 				'description' => __( 'The author is working on the content.', 'sit-cwm' ),
 				'color'       => '#3858e9',
 				'order'       => 20,
@@ -330,7 +330,7 @@ final class StatusManager {
 			),
 			'review'        => array(
 				'slug'        => 'review',
-				'label'       => __( 'Review', 'sit-cwm' ),
+				'label'       => _x( 'Review', 'workflow status', 'sit-cwm' ),
 				'description' => __( 'Awaiting reviewer feedback.', 'sit-cwm' ),
 				'color'       => '#f0b849',
 				'order'       => 30,
@@ -338,7 +338,7 @@ final class StatusManager {
 			),
 			'needs_changes' => array(
 				'slug'        => 'needs_changes',
-				'label'       => __( 'Needs Changes', 'sit-cwm' ),
+				'label'       => _x( 'Needs Changes', 'workflow status', 'sit-cwm' ),
 				'description' => __( 'Sent back to the author for changes.', 'sit-cwm' ),
 				'color'       => '#d63638',
 				'order'       => 40,
@@ -346,7 +346,7 @@ final class StatusManager {
 			),
 			'approved'      => array(
 				'slug'        => 'approved',
-				'label'       => __( 'Approved', 'sit-cwm' ),
+				'label'       => _x( 'Approved', 'workflow status', 'sit-cwm' ),
 				'description' => __( 'Cleared for publication.', 'sit-cwm' ),
 				'color'       => '#00a32a',
 				'order'       => 50,
@@ -354,7 +354,7 @@ final class StatusManager {
 			),
 			'published'     => array(
 				'slug'        => 'published',
-				'label'       => __( 'Published', 'sit-cwm' ),
+				'label'       => _x( 'Published', 'workflow status', 'sit-cwm' ),
 				'description' => __( 'Published; the workflow cycle is complete.', 'sit-cwm' ),
 				'color'       => '#2271b1',
 				'order'       => 60,

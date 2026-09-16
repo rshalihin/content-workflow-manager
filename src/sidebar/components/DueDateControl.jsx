@@ -7,11 +7,24 @@
  */
 import { Button, DatePicker, Dropdown } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
+import { caution, Icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import { formatDate, isOverdue, isYmd, toYmd } from '../../utils/format';
+
+/**
+ * Warning icon for an overdue date, so the state is never shown by colour
+ * alone. Decorative: the text already says "overdue".
+ *
+ * @return {Element} Icon.
+ */
+function OverdueIcon() {
+	return (
+		<Icon className="sit-cwm-overdue-icon" icon={ caution } size={ 16 } />
+	);
+}
 
 /**
  * @param {Object}   props            Props.
@@ -55,7 +68,12 @@ export default function DueDateControl( {
 				{ __( 'Due date', 'sit-cwm' ) }
 			</span>
 
-			{ ! canEdit && <span className={ valueClass }>{ text }</span> }
+			{ ! canEdit && (
+				<span className={ valueClass }>
+					{ overdue && <OverdueIcon /> }
+					{ text }
+				</span>
+			) }
 
 			{ canEdit && (
 				<div className="sit-cwm-due-date-row">
@@ -75,6 +93,7 @@ export default function DueDateControl( {
 								) }
 								showTooltip={ false }
 							>
+								{ overdue && <OverdueIcon /> }
 								{ text }
 							</Button>
 						) }

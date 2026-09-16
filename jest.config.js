@@ -15,9 +15,8 @@ module.exports = {
 	// Some dependencies of @wordpress/components ship ESM only (`uuid`, and
 	// `.mjs` builds such as @wordpress/theme); let Babel compile those.
 	transform: {
-		'\\.m?[jt]sx?$': require.resolve(
-			'@wordpress/scripts/config/babel-transform'
-		),
+		'\\.m?[jt]sx?$':
+			require.resolve( '@wordpress/scripts/config/babel-transform' ),
 	},
 	transformIgnorePatterns: [ '/node_modules/(?!uuid/)(?!.*\\.mjs$)' ],
 };

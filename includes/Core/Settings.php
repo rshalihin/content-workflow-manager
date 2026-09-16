@@ -31,6 +31,15 @@ final class Settings {
 	const OPTION = 'sit_cwm_settings';
 
 	/**
+	 * Post types that can never be workflow-enabled, on top of every `wp_*`
+	 * post type core uses internally (blocks, templates, navigation, …).
+	 *
+	 * @since 1.0.0
+	 * @var string[]
+	 */
+	const EXCLUDED_POST_TYPES = array( 'attachment', 'revision', 'nav_menu_item' );
+
+	/**
 	 * Default settings.
 	 *
 	 * @since 1.0.0
@@ -81,8 +90,8 @@ final class Settings {
 	 * Merges a partial settings array into the stored settings and saves it.
 	 *
 	 * The whole update is rejected (nothing saved) when the payload is not an
-	 * array or `post_types` is not a list of registered public post types.
-	 * Unknown keys are ignored.
+	 * array or `post_types` is not a list of post types that may be enabled
+	 * (see `available_post_types()`). Unknown keys are ignored.
 	 *
 	 * @since 1.0.0
 	 *
@@ -114,18 +123,21 @@ final class Settings {
 			return true;
 		}
 
-		return update_option( self::OPTION, $settings );
+		return update_option( self::OPTION, $settings, true );
 	}
 
 	/**
 	 * Seeds the option with defaults when it is absent. Never overwrites.
+	 *
+	 * Autoloaded: it is small and read on every request, so it rides along
+	 * with `alloptions` instead of costing its own query.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @return void
 	 */
 	public function seed(): void {
-		add_option( self::OPTION, $this->defaults() );
+		add_option( self::OPTION, $this->defaults(), '', true );
 	}
 
 	/**
@@ -163,7 +175,31 @@ final class Settings {
 	}
 
 	/**
-	 * Validates a post type list against registered public post types.
+	 * Post types the workflow may be enabled for: registered with an admin UI,
+	 * minus `EXCLUDED_POST_TYPES` and core's internal `wp_*` post types.
+	 *
+	 * Shared by `update()` and the settings screen, so both accept the same list.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return array<string, string> Slug => slug, in registration order.
+	 */
+	public function available_post_types(): array {
+		$types = array();
+
+		foreach ( get_post_types( array( 'show_ui' => true ) ) as $post_type ) {
+			if ( in_array( $post_type, self::EXCLUDED_POST_TYPES, true ) || 0 === strpos( $post_type, 'wp_' ) ) {
+				continue;
+			}
+
+			$types[ $post_type ] = $post_type;
+		}
+
+		return $types;
+	}
+
+	/**
+	 * Validates a post type list against `available_post_types()`.
 	 *
 	 * @since 1.0.0
 	 *
@@ -175,8 +211,8 @@ final class Settings {
 			return null;
 		}
 
-		$public = get_post_types( array( 'public' => true ) );
-		$types  = array();
+		$available = $this->available_post_types();
+		$types     = array();
 
 		foreach ( $value as $post_type ) {
 			if ( ! is_string( $post_type ) ) {
@@ -185,7 +221,7 @@ final class Settings {
 
 			$post_type = sanitize_key( $post_type );
 
-			if ( ! isset( $public[ $post_type ] ) ) {
+			if ( ! isset( $available[ $post_type ] ) ) {
 				return null;
 			}
 

@@ -94,6 +94,17 @@ export function isAbortError( error ) {
 }
 
 /**
+ * Whether an error means the server could not be reached at all, as opposed
+ * to a response the server sent (4xx/5xx).
+ *
+ * @param {*} error Normalized error.
+ * @return {boolean} True for network failures.
+ */
+export function isNetworkError( error ) {
+	return !! error && error.code === FETCH_ERROR;
+}
+
+/**
  * Turns anything `apiFetch` can reject with into an `ApiError`.
  *
  * Handles REST `WP_Error` bodies (`{ code, message, data: { status } }`),
@@ -323,6 +334,26 @@ export function getPosts( args = {}, { signal } = {} ) {
 		withQuery( `/${ namespace() }/posts`, args ),
 		signal
 	);
+}
+
+/**
+ * Applies one workflow action to many posts.
+ *
+ * The server authorizes every post on its own and answers with the outcome of
+ * each: `{ succeeded, failed, items }`. A rejected promise means the request as
+ * a whole failed (e.g. malformed or unauthenticated).
+ *
+ * @param {number[]} postIds Post ids (max 100).
+ * @param {string}   action  `change_status`, `assign_reviewer` or `set_due_date`.
+ * @param {Object}   payload `{ status }`, `{ reviewer_id }` or `{ due_date }`.
+ * @return {Promise<Object>} Batch result.
+ */
+export function batchUpdate( postIds, action, payload ) {
+	return request( {
+		path: `/${ namespace() }/posts/batch`,
+		method: 'POST',
+		data: { post_ids: postIds, action, payload },
+	} );
 }
 
 /**

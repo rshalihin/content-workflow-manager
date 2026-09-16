@@ -56,7 +56,21 @@ describe( 'buildFields', () => {
 			'author',
 			'post_type',
 			'last_activity',
+			'is_overdue',
 		] );
+	} );
+
+	it( 'offers "Overdue only" as a primary filter that is never a column', () => {
+		const overdue = field( buildFields(), 'is_overdue' );
+
+		expect( overdue.elements ).toEqual( [
+			{ value: true, label: 'Overdue only' },
+		] );
+		expect( overdue.filterBy ).toEqual( {
+			operators: FILTER_OPERATORS.is_overdue,
+			isPrimary: true,
+		} );
+		expect( overdue.enableHiding ).toBe( false );
 	} );
 
 	it( 'reads status and post type options from the bootstrap', () => {

@@ -23,20 +23,41 @@ const eligible = ( item ) =>
 		.filter( ( action ) => action.isEligible( item ) )
 		.map( ( action ) => action.id );
 
-describe( 'dashboard row actions', () => {
-	it( 'defines single-row actions only', () => {
+const BULK = [ 'change-status', 'assign-reviewer', 'set-due-date' ];
+
+describe( 'dashboard actions', () => {
+	it( 'defines row quick actions and the bulk-capable actions', () => {
 		const actions = buildActions( { onChanged: () => {} } );
 
 		expect( actions.map( ( action ) => action.id ) ).toEqual( [
 			'edit',
 			'approve',
 			'request-changes',
-			'assign-reviewer',
-			'set-due-date',
+			...BULK,
 		] );
-		actions.forEach( ( action ) =>
-			expect( action.supportsBulk ).toBeFalsy()
-		);
+		expect(
+			actions
+				.filter( ( action ) => action.supportsBulk )
+				.map( ( action ) => action.id )
+		).toEqual( BULK );
+	} );
+
+	it( 'disables bulk actions while a batch runs without swapping modals', () => {
+		const idle = buildActions( { onChanged: () => {} } );
+		const running = buildActions( {
+			onChanged: () => {},
+			isBulkRunning: true,
+		} );
+
+		running
+			.filter( ( action ) => action.supportsBulk )
+			.forEach( ( action, index ) => {
+				expect( action.disabled ).toBe( true );
+				expect( action.RenderModal ).toBe(
+					idle.filter( ( entry ) => entry.supportsBulk )[ index ]
+						.RenderModal
+				);
+			} );
 	} );
 
 	it( 'offers only Edit when the server offers nothing else', () => {
@@ -53,7 +74,7 @@ describe( 'dashboard row actions', () => {
 					],
 				} )
 			)
-		).toEqual( [ 'edit', 'approve', 'request-changes' ] );
+		).toEqual( [ 'edit', 'approve', 'request-changes', 'change-status' ] );
 
 		expect(
 			eligible(
@@ -61,7 +82,7 @@ describe( 'dashboard row actions', () => {
 					available_transitions: [ { slug: 'needs_changes' } ],
 				} )
 			)
-		).toEqual( [ 'edit', 'request-changes' ] );
+		).toEqual( [ 'edit', 'request-changes', 'change-status' ] );
 	} );
 
 	it( 'offers reviewer and due date actions from the row capabilities', () => {

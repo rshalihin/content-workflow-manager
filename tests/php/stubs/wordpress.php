@@ -36,6 +36,23 @@ if ( ! function_exists( '__' ) ) {
 	}
 }
 
+if ( ! function_exists( '_x' ) ) {
+	/**
+	 * Translation-with-context stub: returns the text unchanged.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $text    Text.
+	 * @param string $context Translation context.
+	 * @param string $domain  Text domain.
+	 * @return string
+	 */
+	function _x( $text, $context, $domain = 'default' ) {
+		unset( $context, $domain );
+		return $text;
+	}
+}
+
 if ( ! function_exists( 'sanitize_key' ) ) {
 	/**
 	 * Port of core `sanitize_key()`.

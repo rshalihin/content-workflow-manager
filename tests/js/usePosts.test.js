@@ -113,6 +113,7 @@ describe( 'viewToQuery', () => {
 			[ '2026-10-01', '2026-09-01' ],
 			{ due_after: '2026-09-01', due_before: '2026-10-01' },
 		],
+		[ 'is_overdue', 'is', true, { overdue: true } ],
 	];
 
 	it( 'has a mapping case for every declared operator', () => {
@@ -173,6 +174,8 @@ describe( 'viewToQuery', () => {
 		[ 'due_date', 'before', 'tomorrow' ],
 		[ 'due_date', 'between', [ '2026-09-01' ] ],
 		[ 'due_date', 'between', '2026-09-01' ],
+		[ 'is_overdue', 'is', false ],
+		[ 'is_overdue', 'is', 'yes' ],
 	] )( 'drops invalid value for %s %s', ( field, operator, value ) => {
 		expect( filtered( field, operator, value ) ).toEqual( DEFAULTS );
 	} );
@@ -307,5 +310,34 @@ describe( 'usePosts', () => {
 		} );
 		expect( result.current.records ).toEqual( [] );
 		expect( result.current.totalItems ).toBe( 0 );
+	} );
+
+	it( 'keeps the rows when a background refresh fails', async () => {
+		apiFetch
+			.mockResolvedValueOnce( response( [ { post_id: 1 } ], 1 ) )
+			.mockRejectedValueOnce( {
+				code: 'fetch_error',
+				message: 'Offline',
+			} );
+
+		const { result } = renderHook( () => usePosts( { page: 1 } ) );
+
+		await waitFor( () =>
+			expect( result.current.records ).toHaveLength( 1 )
+		);
+
+		act( () => result.current.refresh() );
+
+		expect( result.current.isRefreshing ).toBe( true );
+
+		await waitFor( () =>
+			expect( result.current.isRefreshing ).toBe( false )
+		);
+
+		expect( result.current.error ).toEqual(
+			expect.objectContaining( { code: 'fetch_error', status: 0 } )
+		);
+		expect( result.current.records ).toEqual( [ { post_id: 1 } ] );
+		expect( result.current.totalItems ).toBe( 1 );
 	} );
 } );

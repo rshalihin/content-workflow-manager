@@ -82,6 +82,38 @@ final class PermissionManager {
 	}
 
 	/**
+	 * Whether a user may submit a bulk workflow request at all.
+	 *
+	 * Only the gate to *attempt* a batch: every post in it is authorized again,
+	 * individually, by WorkflowManager.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param int|null $user_id User id; null for the current user.
+	 * @return bool
+	 */
+	public function can_attempt_batch( ?int $user_id = null ): bool {
+		$user = $this->resolve_user( $user_id );
+
+		return null !== $user && ( user_can( $user, Capabilities::MANAGE_WORKFLOWS ) || user_can( $user, 'edit_posts' ) );
+	}
+
+	/**
+	 * Whether a user may be assigned as a reviewer: they exist and hold
+	 * `sit_cwm_review_content`.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param int $reviewer_id Candidate reviewer user id.
+	 * @return bool
+	 */
+	public function can_be_reviewer( int $reviewer_id ): bool {
+		$user = $reviewer_id > 0 ? $this->resolve_user( $reviewer_id ) : null;
+
+		return null !== $user && user_can( $user, Capabilities::REVIEW_CONTENT );
+	}
+
+	/**
 	 * Which plugin capabilities a user holds, for UI hints.
 	 *
 	 * Scripts use this to hide controls a user cannot use; it never grants

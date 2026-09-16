@@ -473,7 +473,7 @@ final class WorkflowManagerTest extends WP_UnitTestCase {
 		$state = $this->workflow->get_workflow( $post );
 
 		$this->assertSame(
-			array( 'post_id', 'post_title', 'post_type', 'post_status', 'edit_link', 'status', 'status_label', 'reviewer', 'due_date', 'available_transitions', 'capabilities' ),
+			array( 'post_id', 'post_title', 'post_type', 'post_status', 'edit_link', 'status', 'status_label', 'status_is_unknown', 'reviewer', 'due_date', 'available_transitions', 'capabilities' ),
 			array_keys( $state )
 		);
 		$this->assertSame( $post, $state['post_id'] );

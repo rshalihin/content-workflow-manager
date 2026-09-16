@@ -272,7 +272,7 @@ class WorkflowController extends AbstractController {
 		if ( ! $request->has_param( 'from' ) ) {
 			return new WP_Error(
 				'rest_missing_callback_param',
-				/* translators: %s: Parameter name. */
+				/* translators: %s: Comma-separated parameter names. */
 				sprintf( __( 'Missing parameter(s): %s', 'sit-cwm' ), 'from' ),
 				array(
 					'status' => 400,
@@ -450,6 +450,11 @@ class WorkflowController extends AbstractController {
 				'status_label'          => array(
 					'description' => __( 'Workflow status label.', 'sit-cwm' ),
 					'type'        => 'string',
+					'readonly'    => true,
+				),
+				'status_is_unknown'     => array(
+					'description' => __( 'Whether the stored workflow status is no longer registered and the default status is reported instead.', 'sit-cwm' ),
+					'type'        => 'boolean',
 					'readonly'    => true,
 				),
 				'reviewer'              => array(

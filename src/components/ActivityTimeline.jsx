@@ -7,7 +7,12 @@
 /**
  * WordPress dependencies
  */
-import { Button, Notice, VisuallyHidden } from '@wordpress/components';
+import {
+	Button,
+	Notice,
+	Spinner,
+	VisuallyHidden,
+} from '@wordpress/components';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 
@@ -108,10 +113,15 @@ function useNewEntriesAnnouncement( items ) {
  * @return {Element} Timeline.
  */
 export default function ActivityTimeline( { postId, version = 0, perPage } ) {
-	const { items, isLoading, error, hasMore, loadMore, retry } = useActivity(
-		postId,
-		{ perPage, version }
-	);
+	const {
+		items,
+		isLoading,
+		isRefreshing,
+		error,
+		hasMore,
+		loadMore,
+		retry,
+	} = useActivity( postId, { perPage, version } );
 	const groups = useMemo( () => groupByDay( items ), [ items ] );
 	const announcement = useNewEntriesAnnouncement( items );
 
@@ -140,8 +150,21 @@ export default function ActivityTimeline( { postId, version = 0, perPage } ) {
 			{ isEmpty && isLoading && ! error && <Skeleton /> }
 
 			{ isEmpty && ! isLoading && ! error && (
-				<p className="sit-cwm-activity-empty">
-					{ __( 'No activity yet.', 'sit-cwm' ) }
+				<div className="sit-cwm-activity-empty">
+					<p>{ __( 'No activity yet.', 'sit-cwm' ) }</p>
+					<p>
+						{ __(
+							'Status changes, reviewer assignments, due dates and comments will appear here.',
+							'sit-cwm'
+						) }
+					</p>
+				</div>
+			) }
+
+			{ isRefreshing && (
+				<p className="sit-cwm-activity-refreshing">
+					<Spinner />
+					{ __( 'Updating…', 'sit-cwm' ) }
 				</p>
 			) }
 

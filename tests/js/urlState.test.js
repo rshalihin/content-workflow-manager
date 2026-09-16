@@ -54,11 +54,13 @@ describe( 'dashboard URL state', () => {
 					operator: 'between',
 					value: [ '2026-09-01', '2026-09-30' ],
 				},
+				{ field: 'is_overdue', operator: 'is', value: true },
 			],
 		};
 
 		const params = viewToSearchParams( view, BASE );
 
+		expect( params.get( 'overdue' ) ).toBe( 'true' );
 		expect( params.get( 'page' ) ).toBe( 'sit-cwm-dashboard' );
 		expect( params.get( 'type' ) ).toBe( 'page' );
 		expect( params.get( 'post_type' ) ).toBeNull();

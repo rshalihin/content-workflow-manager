@@ -93,6 +93,38 @@ describe( 'useWorkflow', () => {
 		expect( signal.aborted ).toBe( true );
 	} );
 
+	it( 'marks the post as gone on a 404 mutation and refuses later ones', async () => {
+		apiFetch
+			.mockResolvedValueOnce( workflow() )
+			.mockRejectedValueOnce(
+				restError( 'sit_cwm_not_managed', 'No workflow.', 404 )
+			);
+
+		const { result } = renderHook( () => useWorkflow( 42 ) );
+
+		await waitFor( () => expect( result.current.workflow ).not.toBeNull() );
+
+		expect( result.current.isGone ).toBe( false );
+
+		await act( async () => {
+			await result.current.setDueDate( '2026-09-30' );
+		} );
+
+		expect( result.current.isGone ).toBe( true );
+		// The last known state stays visible behind the notice.
+		expect( result.current.workflow ).toEqual( workflow() );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+
+		let error;
+
+		await act( async () => {
+			error = await result.current.updateStatus( 'approved' );
+		} );
+
+		expect( error ).toEqual( expect.objectContaining( { status: 404 } ) );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
+	} );
+
 	it( 'sends from/status and applies the server response', async () => {
 		apiFetch.mockResolvedValueOnce( workflow() ).mockResolvedValueOnce(
 			workflow( {

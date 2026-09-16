@@ -5,13 +5,18 @@
  * reviewer and author options are passed in from `/users` and the loaded rows.
  * Only `title` and `due_date` sort, and filters only offer operators
  * `viewToQuery()` maps to the REST API.
+ *
+ * Cell renderers are memoized components: DataViews re-renders every row on
+ * selection or hover changes, and a row whose `item` did not change skips it.
  */
 
 /**
  * WordPress dependencies
  */
 import { dateI18n, getSettings, humanTimeDiff } from '@wordpress/date';
+import { memo } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
+import { caution, Icon } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -71,7 +76,7 @@ function userElements( users ) {
 		.sort( ( a, b ) => a.label.localeCompare( b.label ) );
 }
 
-function TitleCell( { item } ) {
+const TitleCell = memo( ( { item } ) => {
 	const title = item.title || __( '(no title)', 'sit-cwm' );
 
 	return isSafeUrl( item.edit_link ) ? (
@@ -81,13 +86,19 @@ function TitleCell( { item } ) {
 	) : (
 		<span>{ title }</span>
 	);
-}
+} );
 
-function StatusCell( { item } ) {
-	return <StatusBadge status={ item.status } label={ item.status_label } />;
-}
+const StatusCell = memo( ( { item } ) => {
+	return (
+		<StatusBadge
+			status={ item.status }
+			label={ item.status_label }
+			isUnknown={ !! item.status_is_unknown }
+		/>
+	);
+} );
 
-function ReviewerCell( { item } ) {
+const ReviewerCell = memo( ( { item } ) => {
 	const { reviewer } = item;
 
 	if ( ! reviewer ) {
@@ -108,9 +119,9 @@ function ReviewerCell( { item } ) {
 			<span>{ reviewer.name }</span>
 		</span>
 	);
-}
+} );
 
-function DueDateCell( { item } ) {
+const DueDateCell = memo( ( { item } ) => {
 	const text = formatDate( item.due_date );
 
 	if ( ! text ) {
@@ -124,6 +135,7 @@ function DueDateCell( { item } ) {
 
 	return (
 		<span className="sit-cwm-due-date is-overdue">
+			<Icon icon={ caution } size={ 16 } />
 			{ sprintf(
 				/* translators: %s: Due date. */
 				__( '%s (overdue)', 'sit-cwm' ),
@@ -131,26 +143,26 @@ function DueDateCell( { item } ) {
 			) }
 		</span>
 	);
-}
+} );
 
-function AuthorCell( { item } ) {
+const AuthorCell = memo( ( { item } ) => {
 	return item.author?.name ? (
 		<span>{ item.author.name }</span>
 	) : (
 		<EmptyValue label={ __( 'Unknown author', 'sit-cwm' ) } />
 	);
-}
+} );
 
-function PostTypeCell( { item } ) {
+const PostTypeCell = memo( ( { item } ) => {
 	const { postTypes } = getBootstrap();
 	const type = Array.isArray( postTypes )
 		? postTypes.find( ( entry ) => entry && entry.slug === item.post_type )
 		: null;
 
 	return <span>{ type?.singularLabel || item.post_type }</span>;
-}
+} );
 
-function LastActivityCell( { item } ) {
+const LastActivityCell = memo( ( { item } ) => {
 	const entry = item.last_activity;
 
 	if ( ! entry || ! entry.created_at ) {
@@ -175,7 +187,18 @@ function LastActivityCell( { item } ) {
 			</time>
 		</span>
 	);
-}
+} );
+
+const OverdueCell = memo( ( { item } ) => {
+	return item.is_overdue ? (
+		<span className="sit-cwm-due-date is-overdue">
+			<Icon icon={ caution } size={ 16 } />
+			{ __( 'Overdue', 'sit-cwm' ) }
+		</span>
+	) : (
+		<EmptyValue label={ __( 'Not overdue', 'sit-cwm' ) } />
+	);
+} );
 
 /**
  * Builds the dashboard fields.
@@ -273,6 +296,22 @@ export default function buildFields( { reviewers = [], authors = [] } = {} ) {
 			render: LastActivityCell,
 			enableSorting: false,
 			filterBy: false,
+		},
+		{
+			// Filter-only field: the "Overdue only" quick filter. Never a column.
+			id: 'is_overdue',
+			label: __( 'Overdue', 'sit-cwm' ),
+			getValue: ( { item } ) => !! item.is_overdue,
+			render: OverdueCell,
+			elements: [
+				{ value: true, label: __( 'Overdue only', 'sit-cwm' ) },
+			],
+			enableSorting: false,
+			enableHiding: false,
+			filterBy: {
+				operators: FILTER_OPERATORS.is_overdue,
+				isPrimary: true,
+			},
 		},
 	];
 }

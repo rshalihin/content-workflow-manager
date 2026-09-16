@@ -154,6 +154,7 @@ final class WorkflowManager {
 			'edit_link'             => (string) get_edit_post_link( $state['post_id'], 'raw' ),
 			'status'                => $state['status'],
 			'status_label'          => $this->statuses->label( $state['status'] ),
+			'status_is_unknown'     => $this->posts->has_unknown_status( $state['post_id'] ),
 			'reviewer'              => $this->reviewer_summary( $state['reviewer_id'] ),
 			'due_date'              => $state['due_date'],
 			'available_transitions' => $transitions,
@@ -340,7 +341,8 @@ final class WorkflowManager {
 	 * Sets or clears a post's reviewer.
 	 *
 	 * Authorization runs before the reviewer id is checked, so users without
-	 * the capability cannot probe which user ids exist. Assigning the current
+	 * the capability cannot probe which user ids exist. The reviewer must be
+	 * an existing user holding `sit_cwm_review_content`. Assigning the current
 	 * reviewer again is a no-op that logs nothing.
 	 *
 	 * @since 1.0.0
@@ -366,6 +368,14 @@ final class WorkflowManager {
 			return new WP_Error(
 				'sit_cwm_invalid_user',
 				__( 'The selected reviewer does not exist.', 'sit-cwm' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( 0 !== $reviewer_id && ! $this->permissions->can_be_reviewer( $reviewer_id ) ) {
+			return new WP_Error(
+				'sit_cwm_invalid_user',
+				__( 'The selected user is not allowed to review content.', 'sit-cwm' ),
 				array( 'status' => 400 )
 			);
 		}

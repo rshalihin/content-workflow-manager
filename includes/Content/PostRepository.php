@@ -142,6 +142,25 @@ final class PostRepository implements Bootable {
 	}
 
 	/**
+	 * Whether a post stores a workflow status that is not registered (e.g. a
+	 * Pro filter removed it). `get_status()` then reports the default status.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param int $post_id Post id.
+	 * @return bool False when the status is unset or registered.
+	 */
+	public function has_unknown_status( int $post_id ): bool {
+		$raw = $this->read( $post_id, self::META_STATUS );
+
+		if ( null === $raw || '' === $raw ) {
+			return false;
+		}
+
+		return ! is_string( $raw ) || ! $this->statuses->exists( trim( $raw ) );
+	}
+
+	/**
 	 * Stores a post's workflow status.
 	 *
 	 * Unregistered slugs are rejected rather than coerced to the default, so a
@@ -352,6 +371,7 @@ final class PostRepository implements Bootable {
 	 *     @type int      $author      Author id; `0` for any.
 	 *     @type string   $due_after   Earliest due date, `Y-m-d`, inclusive.
 	 *     @type string   $due_before  Latest due date, `Y-m-d`, inclusive.
+	 *     @type bool     $overdue     Only posts due before today (site timezone) and not in a final status.
 	 *     @type string   $orderby     `title`, `date` (default), `due_date` or `status`.
 	 *     @type string   $order       `ASC` or `DESC` (default).
 	 *     @type int      $page        1-based page; default 1.
@@ -701,7 +721,65 @@ final class PostRepository implements Bootable {
 			);
 		}
 
+		// Same rule as the dashboard's `is_overdue` flag: due before today in the
+		// site timezone, and the workflow not yet in a final status.
+		if ( ! empty( $args['overdue'] ) ) {
+			$clauses[] = array(
+				'key'     => self::META_DUE_DATE,
+				'value'   => current_datetime()->format( 'Y-m-d' ),
+				'compare' => '<',
+				'type'    => 'DATE',
+			);
+
+			$unfinished = $this->unfinished_status_clause();
+
+			if ( null !== $unfinished ) {
+				$clauses[] = $unfinished;
+			}
+		}
+
 		return $clauses;
+	}
+
+	/**
+	 * `meta_query` clause matching posts whose workflow status is not final.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return array|null Null when no registered status is final.
+	 */
+	private function unfinished_status_clause(): ?array {
+		$final = array();
+
+		foreach ( $this->statuses->slugs() as $slug ) {
+			if ( $this->statuses->is_final( $slug ) ) {
+				$final[] = $slug;
+			}
+		}
+
+		if ( array() === $final ) {
+			return null;
+		}
+
+		$clause = array(
+			'key'     => self::META_STATUS,
+			'value'   => $final,
+			'compare' => 'NOT IN',
+		);
+
+		// Posts without status meta have the default status.
+		if ( in_array( $this->statuses->default_status(), $final, true ) ) {
+			return $clause;
+		}
+
+		return array(
+			'relation' => 'OR',
+			$clause,
+			array(
+				'key'     => self::META_STATUS,
+				'compare' => 'NOT EXISTS',
+			),
+		);
 	}
 
 	/**
@@ -737,7 +815,24 @@ final class PostRepository implements Bootable {
 	 * @return int[] Unique positive ids, in input order.
 	 */
 	private function prime( array $post_ids ): array {
-		$ids = array_values( array_unique( array_filter( array_map( 'absint', $post_ids ) ) ) );
+		$ids = array();
+
+		/*
+		 * Invalid ids are dropped, never coerced: `absint( -3 )` is `3`, a real
+		 * post the caller never asked about, which would leak its workflow
+		 * state into the response. Same reasoning as `sanitize_reviewer_id()`.
+		 */
+		foreach ( $post_ids as $post_id ) {
+			$id = ( is_bool( $post_id ) || ! is_scalar( $post_id ) )
+				? false
+				: filter_var( $post_id, FILTER_VALIDATE_INT );
+
+			if ( false !== $id && $id > 0 ) {
+				$ids[ $id ] = $id;
+			}
+		}
+
+		$ids = array_values( $ids );
 
 		if ( array() !== $ids ) {
 			update_meta_cache( 'post', $ids );

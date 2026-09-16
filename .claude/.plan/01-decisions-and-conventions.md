@@ -84,6 +84,9 @@ it wholesale.
 Plus, for every transition: the user must pass `edit_post` on that specific post
 (mapped meta cap), and the post type must be workflow-enabled (D7).
 
+Amendment (step 17): an assigned reviewer must hold `sit_cwm_review_content`
+(`PermissionManager::can_be_reviewer()`), otherwise `sit_cwm_invalid_user` 400.
+
 Other capabilities: `sit_cwm_assign_reviewer` (set/clear reviewer and due date),
 `sit_cwm_view_activity` (read activity + comments),
 `sit_cwm_manage_workflows` (settings page, bulk actions across posts).
@@ -132,6 +135,12 @@ Option `sit_cwm_settings` (array), key `post_types`, default `[ 'post', 'page' ]
 Filter: `sit_cwm_enabled_post_types`. A post whose type is not enabled has no
 workflow: REST returns 404 for its workflow routes, the sidebar does not render.
 
+Amendment (step 18): the post types that may be enabled are
+`Settings::available_post_types()`: registered with `show_ui`, minus
+`attachment`, `revision`, `nav_menu_item` and every `wp_*` type (previously
+"registered public post types"). Both `Settings::update()` and the settings
+screen validate against it. Disabling a type never deletes its meta or activity.
+
 ## D8 — Activity table `{$wpdb->prefix}sit_cwm_activity`
 
 | Column | Type | Notes |
@@ -169,6 +178,17 @@ Every route defines a real `permission_callback`. Errors use `WP_Error` with
 codes `sit_cwm_invalid_post`, `sit_cwm_not_managed`, `sit_cwm_forbidden`,
 `sit_cwm_invalid_status`, `sit_cwm_invalid_transition`, `sit_cwm_invalid_user`,
 `sit_cwm_invalid_date` and correct HTTP statuses (400/403/404/409).
+
+Amendments (steps 17 and 20):
+- `POST /posts/batch` takes `{ post_ids (1–100), action, payload }` with
+  `action` ∈ `change_status` / `assign_reviewer` / `set_due_date`, and answers
+  HTTP 200 with `{ succeeded, failed, items }`. Per-item post-gate failures are
+  `sit_cwm_invalid_post`; a malformed request as a whole is 400.
+- Per-post routes answer missing, unmanaged and unreadable posts with the
+  identical `sit_cwm_not_managed` 404 (a missing id is no longer
+  `sit_cwm_invalid_post`), so hidden post ids cannot be enumerated.
+- `GET /posts` also accepts `overdue` (boolean, site timezone, non-final
+  statuses only).
 
 ## D10 — Action/filter hooks fired by Free core (Pro extension surface)
 

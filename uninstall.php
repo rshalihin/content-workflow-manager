@@ -6,6 +6,10 @@
  * `sit_cwm_settings['delete_data_on_uninstall']`. Deactivation never removes
  * data; this file runs only when the plugin is deleted.
  *
+ * Disabling a post type in the settings never deletes anything either: its
+ * workflow meta and activity rows stay in place until this routine runs with
+ * the opt-in set, which then removes them for every post type.
+ *
  * @package Sit_Cwm
  * @since   1.0.0
  */

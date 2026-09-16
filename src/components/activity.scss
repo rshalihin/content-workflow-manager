@@ -77,8 +77,28 @@
 }
 
 .sit-cwm-activity-empty {
-	margin: 0;
 	color: #757575;
+
+	p {
+		margin: 0;
+	}
+
+	p + p {
+		margin-top: 4px;
+	}
+}
+
+.sit-cwm-activity-refreshing {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 12px;
+	color: #757575;
+	font-size: 12px;
+
+	.components-spinner {
+		margin: 0;
+	}
 }
 
 .sit-cwm-activity-error {

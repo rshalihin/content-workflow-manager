@@ -7,3 +7,13 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+
+# Development only: kept out of `git archive` / `composer archive` release zips.
+/bin export-ignore
+/tests export-ignore
+/.github export-ignore
+/.claude export-ignore
+/.wp-env.json export-ignore
+/phpcs.xml.dist export-ignore
+/phpunit.xml.dist export-ignore
+/playwright.config.js export-ignore

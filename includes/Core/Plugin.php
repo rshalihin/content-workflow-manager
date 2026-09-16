@@ -10,16 +10,19 @@ namespace Sit_Cwm\Core;
 
 use Sit_Cwm\Activity\ActivityLogger;
 use Sit_Cwm\Admin\Dashboard;
+use Sit_Cwm\Admin\Settings as SettingsPage;
 use Sit_Cwm\Content\PostMeta;
 use Sit_Cwm\Content\PostRepository;
 use Sit_Cwm\Core\Interfaces\Bootable;
 use Sit_Cwm\Editor\SidebarAssets;
 use Sit_Cwm\REST\ActivityController;
 use Sit_Cwm\REST\ActivityFormatter;
+use Sit_Cwm\REST\BatchController;
 use Sit_Cwm\REST\PostsController;
 use Sit_Cwm\REST\UserController;
 use Sit_Cwm\REST\UserSummaries;
 use Sit_Cwm\REST\WorkflowController;
+use Sit_Cwm\Workflow\BulkProcessor;
 use Sit_Cwm\Workflow\PermissionManager;
 use Sit_Cwm\Workflow\StatusManager;
 use Sit_Cwm\Workflow\TransitionManager;
@@ -72,6 +75,7 @@ final class Plugin {
 			'rest.activity',
 			'rest.users',
 			'rest.posts',
+			'rest.batch',
 		),
 	);
 
@@ -261,6 +265,13 @@ final class Plugin {
 		);
 
 		$this->container->set(
+			'bulk_processor',
+			static function ( Container $c ) {
+				return new BulkProcessor( $c->get( 'workflow_manager' ) );
+			}
+		);
+
+		$this->container->set(
 			'rest.workflow',
 			static function ( Container $c ) {
 				return new WorkflowController(
@@ -329,6 +340,18 @@ final class Plugin {
 		);
 
 		$this->container->set(
+			'rest.batch',
+			static function ( Container $c ) {
+				return new BatchController(
+					$c->get( 'bulk_processor' ),
+					$c->get( 'permission_manager' ),
+					$c->get( 'status_manager' ),
+					$c->get( 'post_repository' )
+				);
+			}
+		);
+
+		$this->container->set(
 			'assets',
 			static function ( Container $c ) {
 				return new Assets(
@@ -352,6 +375,13 @@ final class Plugin {
 			'admin.dashboard',
 			static function ( Container $c ) {
 				return new Dashboard( $c->get( 'assets' ), $c->get( 'permission_manager' ) );
+			}
+		);
+
+		$this->container->set(
+			'admin.settings',
+			static function ( Container $c ) {
+				return new SettingsPage( $c->get( 'settings' ), $c->get( 'permission_manager' ) );
 			}
 		);
 

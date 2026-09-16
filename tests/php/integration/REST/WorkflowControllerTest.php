@@ -139,7 +139,8 @@ final class WorkflowControllerTest extends WP_UnitTestCase {
 
 		wp_set_current_user( $admin );
 
-		$this->assert_error_response( $this->get( 999999 ), 'sit_cwm_invalid_post', 404 );
+		// Missing ids answer exactly like hidden posts, so ids cannot be enumerated.
+		$this->assert_error_response( $this->get( 999999 ), 'sit_cwm_not_managed', 404 );
 		$this->assert_error_response( $this->get( $page ), 'sit_cwm_not_managed', 404 );
 
 		wp_set_current_user( $this->make_user( 'author' ) );

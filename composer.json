@@ -41,12 +41,20 @@
 		}
 	},
 	"scripts": {
-		"lint": "phpcs",
-		"lint:fix": "phpcbf",
-		"test": "phpunit",
+		"lint": "@php vendor/bin/phpcs",
+		"lint:fix": "@php vendor/bin/phpcbf",
+		"test": "@php vendor/bin/phpunit",
+		"test:setup": "@php bin/install-wp-tests.php",
 		"test:integration": [
 			"@putenv WP_PHPUNIT__TESTS_CONFIG=tests/php/wp-tests-config.php",
-			"phpunit --testsuite integration"
+			"@php vendor/bin/phpunit --testsuite integration"
 		]
+	},
+	"scripts-descriptions": {
+		"lint": "phpcs with the WordPress ruleset.",
+		"lint:fix": "phpcbf: fix what phpcs can fix automatically.",
+		"test": "PHP unit tests (no WordPress, no database).",
+		"test:setup": "Download a WordPress core checkout and create the test database (no Docker).",
+		"test:integration": "PHP integration tests against the WordPress test library. Drops all tables in the test database."
 	}
 }

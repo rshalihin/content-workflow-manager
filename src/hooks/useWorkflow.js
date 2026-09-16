@@ -5,6 +5,7 @@
 /**
  * WordPress dependencies
  */
+import { speak } from '@wordpress/a11y';
 import { useDispatch } from '@wordpress/data';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
@@ -14,6 +15,7 @@ import { store as noticesStore } from '@wordpress/notices';
  * Internal dependencies
  */
 import * as client from '../api/client';
+import { formatDate } from '../utils/format';
 
 /**
  * Error returned when a mutation is attempted while another is running or
@@ -22,6 +24,13 @@ import * as client from '../api/client';
  * @type {import('../api/client').ApiError}
  */
 const BUSY = { code: 'sit_cwm_busy', message: '', status: 0 };
+
+/**
+ * Error returned when a mutation is attempted after the post disappeared.
+ *
+ * @type {import('../api/client').ApiError}
+ */
+const GONE = { code: 'sit_cwm_gone', message: '', status: 404 };
 
 /**
  * Loads and mutates a post's workflow through the REST API.
@@ -36,16 +45,22 @@ const BUSY = { code: 'sit_cwm_busy', message: '', status: 0 };
  * A status change sends `{ from, status }` with the status the user saw. On a
  * 409 the hook refetches and reports that the post changed elsewhere rather
  * than retrying. A 403 also refetches, so revoked permissions stop being offered.
+ * A 404 after the workflow loaded (post deleted, or its type disabled) sets
+ * `isGone`, and every later mutation is refused without a request.
+ *
+ * Reviewer, due date and comment changes are announced to screen readers;
+ * status changes raise a snackbar, which announces itself.
  *
  * @param {number} postId Post id.
- * @return {Object} `{ workflow, isLoading, isSaving, error, activityVersion,
- *                  updateStatus, assignReviewer, setDueDate, addComment,
- *                  refresh, clearError }`.
+ * @return {Object} `{ workflow, isLoading, isSaving, isGone, error,
+ *                  activityVersion, updateStatus, assignReviewer, setDueDate,
+ *                  addComment, refresh, clearError }`.
  */
 export default function useWorkflow( postId ) {
 	const [ workflow, setWorkflow ] = useState( null );
 	const [ isLoading, setIsLoading ] = useState( Boolean( postId ) );
 	const [ isSaving, setIsSaving ] = useState( false );
+	const [ isGone, setIsGone ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ activityVersion, setActivityVersion ] = useState( 0 );
 	const { createSuccessNotice } = useDispatch( noticesStore );
@@ -56,6 +71,13 @@ export default function useWorkflow( postId ) {
 	const postIdRef = useRef( postId );
 	const controllersRef = useRef( new Set() );
 	const savingRef = useRef( false );
+	const loadedRef = useRef( false );
+	const goneRef = useRef( false );
+
+	const markGone = useCallback( () => {
+		goneRef.current = true;
+		setIsGone( true );
+	}, [] );
 
 	const refresh = useCallback( async () => {
 		const generation = generationRef.current;
@@ -70,6 +92,7 @@ export default function useWorkflow( postId ) {
 			} );
 
 			if ( generation === generationRef.current ) {
+				loadedRef.current = true;
 				setWorkflow( data );
 				setError( null );
 			}
@@ -80,6 +103,10 @@ export default function useWorkflow( postId ) {
 				generation === generationRef.current &&
 				! client.isAbortError( err )
 			) {
+				if ( err.status === 404 && loadedRef.current ) {
+					markGone();
+				}
+
 				setError( err );
 			}
 
@@ -91,16 +118,19 @@ export default function useWorkflow( postId ) {
 				setIsLoading( false );
 			}
 		}
-	}, [] );
+	}, [ markGone ] );
 
 	useEffect( () => {
 		const controllers = controllersRef.current;
 
 		postIdRef.current = postId;
 		savingRef.current = false;
+		loadedRef.current = false;
+		goneRef.current = false;
 		setWorkflow( null );
 		setError( null );
 		setIsSaving( false );
+		setIsGone( false );
 		setIsLoading( Boolean( postId ) );
 
 		if ( postId ) {
@@ -124,6 +154,10 @@ export default function useWorkflow( postId ) {
 	 */
 	const run = useCallback(
 		async ( send, { exposeError } ) => {
+			if ( goneRef.current ) {
+				return { data: null, error: GONE };
+			}
+
 			if ( savingRef.current || ! postIdRef.current ) {
 				return { data: null, error: BUSY };
 			}
@@ -142,7 +176,16 @@ export default function useWorkflow( postId ) {
 
 				return { data, error: null };
 			} catch ( err ) {
-				if ( generation !== generationRef.current || ! exposeError ) {
+				if ( generation !== generationRef.current ) {
+					return { data: null, error: err };
+				}
+
+				// Deleted, or no longer workflow-enabled, while the editor was open.
+				if ( err.status === 404 ) {
+					markGone();
+				}
+
+				if ( ! exposeError ) {
 					return { data: null, error: err };
 				}
 
@@ -173,7 +216,7 @@ export default function useWorkflow( postId ) {
 				}
 			}
 		},
-		[ refresh ]
+		[ refresh, markGone ]
 	);
 
 	/**
@@ -230,9 +273,21 @@ export default function useWorkflow( postId ) {
 
 	const assignReviewer = useCallback(
 		async ( reviewerId ) => {
-			const { error: err } = await update( {
+			const { data, error: err } = await update( {
 				reviewer_id: parseInt( reviewerId, 10 ) || 0,
 			} );
+
+			if ( data ) {
+				speak(
+					data.reviewer?.name
+						? sprintf(
+								/* translators: %s: Reviewer display name. */
+								__( 'Reviewer set to %s.', 'sit-cwm' ),
+								data.reviewer.name
+							)
+						: __( 'Reviewer removed.', 'sit-cwm' )
+				);
+			}
 
 			return err;
 		},
@@ -241,7 +296,21 @@ export default function useWorkflow( postId ) {
 
 	const setDueDate = useCallback(
 		async ( date ) => {
-			const { error: err } = await update( { due_date: date || '' } );
+			const { data, error: err } = await update( {
+				due_date: date || '',
+			} );
+
+			if ( data ) {
+				speak(
+					data.due_date
+						? sprintf(
+								/* translators: %s: Due date. */
+								__( 'Due date set to %s.', 'sit-cwm' ),
+								formatDate( data.due_date )
+							)
+						: __( 'Due date removed.', 'sit-cwm' )
+				);
+			}
 
 			return err;
 		},
@@ -255,6 +324,10 @@ export default function useWorkflow( postId ) {
 				{ exposeError: false }
 			);
 
+			if ( ! err ) {
+				speak( __( 'Comment added.', 'sit-cwm' ) );
+			}
+
 			return err;
 		},
 		[ run ]
@@ -266,6 +339,7 @@ export default function useWorkflow( postId ) {
 		workflow,
 		isLoading,
 		isSaving,
+		isGone,
 		error,
 		activityVersion,
 		updateStatus,

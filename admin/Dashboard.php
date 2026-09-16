@@ -138,6 +138,16 @@ final class Dashboard implements Bootable {
 			'dashicons-clipboard',
 			self::MENU_POSITION
 		);
+
+		// Name the first submenu entry explicitly; otherwise core points the
+		// top-level item at the first submenu added later (Settings).
+		add_submenu_page(
+			self::MENU_SLUG,
+			$title,
+			__( 'Dashboard', 'sit-cwm' ),
+			Capabilities::VIEW_ACTIVITY,
+			self::MENU_SLUG
+		);
 	}
 
 	/**

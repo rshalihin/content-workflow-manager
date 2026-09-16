@@ -337,7 +337,7 @@ final class PostsControllerTest extends WP_UnitTestCase {
 		$row = $rows[0];
 
 		$this->assertSame(
-			array( 'post_id', 'title', 'post_type', 'post_status', 'author', 'status', 'status_label', 'reviewer', 'due_date', 'is_overdue', 'last_activity', 'edit_link', 'available_transitions', 'capabilities' ),
+			array( 'post_id', 'title', 'post_type', 'post_status', 'author', 'status', 'status_label', 'status_is_unknown', 'reviewer', 'due_date', 'is_overdue', 'last_activity', 'edit_link', 'available_transitions', 'capabilities' ),
 			array_keys( $row )
 		);
 		$this->assertSame(

@@ -5,7 +5,12 @@
 /**
  * WordPress dependencies
  */
-import { Button, Notice, PanelBody, Spinner } from '@wordpress/components';
+import {
+	Notice,
+	PanelBody,
+	Spinner,
+	VisuallyHidden,
+} from '@wordpress/components';
 import { useSelect } from '@wordpress/data';
 import {
 	PluginSidebar as EditPostPluginSidebar,
@@ -16,12 +21,14 @@ import {
 	PluginSidebarMoreMenuItem as EditorPluginSidebarMoreMenuItem,
 	store as editorStore,
 } from '@wordpress/editor';
-import { __ } from '@wordpress/i18n';
+import { useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 import { seen } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
+import { isNetworkError } from '../api/client';
 import ActivityTimeline from '../components/ActivityTimeline';
 import useWorkflow from '../hooks/useWorkflow';
 import { getStatusDefinition, isEnabledPostType } from '../utils/format';
@@ -62,9 +69,50 @@ function Unavailable() {
 		<PanelBody>
 			<Notice status="info" isDismissible={ false }>
 				{ __(
-					'Workflow not available for this post type.',
+					'Workflow is not available for this post type. An administrator can enable it in the Content Workflow settings.',
 					'sit-cwm'
 				) }
+			</Notice>
+		</PanelBody>
+	);
+}
+
+/**
+ * Shown when the first load failed.
+ *
+ * @param {Object}   props         Props.
+ * @param {Object}   props.error   Normalized error.
+ * @param {Function} props.onRetry Reloads the workflow.
+ * @return {Element} Panel.
+ */
+function LoadError( { error, onRetry } ) {
+	if ( error.status === 401 || error.status === 403 ) {
+		return (
+			<PanelBody>
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'You don’t have permission to view the workflow of this content.',
+						'sit-cwm'
+					) }
+				</Notice>
+			</PanelBody>
+		);
+	}
+
+	return (
+		<PanelBody>
+			<Notice
+				status="error"
+				isDismissible={ false }
+				actions={ [
+					{
+						label: __( 'Retry', 'sit-cwm' ),
+						onClick: onRetry,
+						variant: 'secondary',
+					},
+				] }
+			>
+				{ error.message }
 			</Notice>
 		</PanelBody>
 	);
@@ -82,6 +130,7 @@ function WorkflowPanel( { postId } ) {
 		workflow,
 		isLoading,
 		isSaving,
+		isGone,
 		error,
 		activityVersion,
 		updateStatus,
@@ -91,11 +140,15 @@ function WorkflowPanel( { postId } ) {
 		refresh,
 		clearError,
 	} = useWorkflow( postId );
+	const [ isGoneDismissed, setIsGoneDismissed ] = useState( false );
 
 	if ( ! workflow && isLoading ) {
 		return (
 			<div className="sit-cwm-sidebar-loading">
 				<Spinner />
+				<VisuallyHidden>
+					{ __( 'Loading workflow…', 'sit-cwm' ) }
+				</VisuallyHidden>
 			</div>
 		);
 	}
@@ -105,32 +158,96 @@ function WorkflowPanel( { postId } ) {
 			return <Unavailable />;
 		}
 
-		return (
-			<PanelBody>
-				<Notice status="error" isDismissible={ false }>
-					{ error.message }
-				</Notice>
-				<Button variant="secondary" onClick={ refresh }>
-					{ __( 'Retry', 'sit-cwm' ) }
-				</Button>
-			</PanelBody>
-		);
+		return <LoadError error={ error } onRetry={ refresh } />;
 	}
 
 	const capabilities = workflow.capabilities || {};
 	const definition = getStatusDefinition( workflow.status );
+	const isLocked = isSaving || isGone;
+	const canChangeAnything =
+		!! capabilities.can_change_status ||
+		!! capabilities.can_assign_reviewer ||
+		!! capabilities.can_set_due_date ||
+		!! capabilities.can_comment;
+	// A refetch (after a 403 or 409, or Retry) keeps the controls in place.
+	const isRefreshing = isLoading && ! isSaving;
 
 	return (
-		<div className="sit-cwm-sidebar">
-			{ error && (
+		<div className="sit-cwm-sidebar" aria-busy={ isLoading || isSaving }>
+			{ isGone && ! isGoneDismissed && (
+				<Notice
+					className="sit-cwm-sidebar-notice"
+					status="warning"
+					isDismissible
+					onRemove={ () => setIsGoneDismissed( true ) }
+				>
+					{ __(
+						'This content was deleted or is no longer part of the workflow. Workflow controls are disabled.',
+						'sit-cwm'
+					) }
+				</Notice>
+			) }
+
+			{ error && ! isGone && (
 				<Notice
 					className="sit-cwm-sidebar-notice"
 					status="error"
 					isDismissible
 					onRemove={ clearError }
+					actions={
+						isNetworkError( error )
+							? [
+									{
+										label: __( 'Retry', 'sit-cwm' ),
+										onClick: () => {
+											clearError();
+											refresh();
+										},
+										variant: 'secondary',
+									},
+							  ]
+							: []
+					}
 				>
 					{ error.message }
 				</Notice>
+			) }
+
+			{ workflow.status_is_unknown && (
+				<Notice
+					className="sit-cwm-sidebar-notice"
+					status="warning"
+					isDismissible={ false }
+				>
+					{ sprintf(
+						/* translators: %s: Default workflow status label, e.g. "Draft". */
+						__(
+							'This content had a workflow status that is no longer available, so it is treated as %s. Use the workflow actions below to continue.',
+							'sit-cwm'
+						),
+						workflow.status_label
+					) }
+				</Notice>
+			) }
+
+			{ ! canChangeAnything && ! isGone && (
+				<Notice
+					className="sit-cwm-sidebar-notice"
+					status="info"
+					isDismissible={ false }
+				>
+					{ __(
+						'You can follow this workflow, but your role doesn’t allow you to change it.',
+						'sit-cwm'
+					) }
+				</Notice>
+			) }
+
+			{ isRefreshing && (
+				<div className="sit-cwm-sidebar-refreshing">
+					<Spinner />
+					<span>{ __( 'Refreshing…', 'sit-cwm' ) }</span>
+				</div>
 			) }
 
 			<PanelBody>
@@ -144,7 +261,7 @@ function WorkflowPanel( { postId } ) {
 						postId={ postId }
 						reviewer={ workflow.reviewer }
 						onChange={ assignReviewer }
-						isSaving={ isSaving }
+						isSaving={ isLocked }
 					/>
 				) }
 
@@ -152,7 +269,7 @@ function WorkflowPanel( { postId } ) {
 					value={ workflow.due_date }
 					onChange={ setDueDate }
 					canEdit={ !! capabilities.can_set_due_date }
-					isSaving={ isSaving }
+					isSaving={ isLocked }
 					isComplete={ !! definition?.is_final }
 				/>
 			</PanelBody>
@@ -162,6 +279,7 @@ function WorkflowPanel( { postId } ) {
 					transitions={ workflow.available_transitions }
 					onTransition={ updateStatus }
 					isSaving={ isSaving }
+					isDisabled={ isGone }
 				/>
 			</PanelBody>
 
@@ -170,6 +288,7 @@ function WorkflowPanel( { postId } ) {
 					<CommentForm
 						onSubmit={ addComment }
 						isSaving={ isSaving }
+						isDisabled={ isGone }
 					/>
 				</PanelBody>
 			) }
