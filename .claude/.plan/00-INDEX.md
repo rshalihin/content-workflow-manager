@@ -73,7 +73,7 @@ Tick a box only when that step's acceptance criteria all pass.
 - [ ] 20 Security hardening review
 - [ ] 21 Performance pass
 - [ ] 22 UX polish + i18n
-- [ ] 23 Docs + release
+- [x] 23 Docs + release  _(docs, screenshots, zip tooling and release.yml done and verified locally; the tag push, the clean-WP install check and the full CI matrix are the developer's)_
 - [ ] 24 Pro extension points audit
 
 ## Out of scope for v1.0 (do not build)

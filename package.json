@@ -15,7 +15,10 @@
     "test:e2e": "wp-scripts test-playwright",
     "test:e2e:local": "node bin/e2e-local.js",
     "env:start": "wp-env start",
-    "makepot": "wp i18n make-pot . languages/sit-cwm.pot --domain=sit-cwm --exclude=tests,bin,artifacts,.github,.claude"
+    "makepot": "wp i18n make-pot . languages/sit-cwm.pot --domain=sit-cwm --exclude=tests,bin,artifacts,.github,.claude",
+    "screenshots": "node bin/capture-screenshots.js",
+    "build:zip": "php bin/build-zip.php --out=dist",
+    "check:version": "php bin/check-version.php"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

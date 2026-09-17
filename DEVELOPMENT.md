@@ -1,25 +1,65 @@
 # Development
 
-Notes for working on Content Workflow Manager. Step 23 expands this into the
-full developer guide.
+Everything you need to work on Content Workflow Manager: environment, build,
+tests, standards, performance budgets and the release process.
+
+[ARCHITECTURE.md](ARCHITECTURE.md) explains how the code is shaped;
+[CONTRIBUTING.md](CONTRIBUTING.md) explains what a change has to satisfy.
+
+## Ten-minute start
+
+From a clean clone, with Node 20+, PHP 7.4+ and Docker:
+
+```sh
+git clone https://github.com/shappire-it/content-workflow-manager.git
+cd content-workflow-manager
+
+composer install     # dev tooling: phpcs, phpunit
+npm ci               # build + test toolchain
+npm run build        # compile src/ → assets/build/
+npm run env:start    # wp-env: WordPress on http://localhost:8888
+```
+
+Then:
+
+1. Open <http://localhost:8888/wp-admin> (`admin` / `password`).
+2. **Plugins** → activate **Content Workflow Manager**.
+3. **Posts → Add New**, give it a title, save a draft.
+4. Click the **Content Workflow** icon in the top-right toolbar — the sidebar
+   shows **Draft** and one button, **Move to Writing**.
+5. Move it to Writing, then Review; assign yourself as reviewer and a due date;
+   then **Approve**.
+6. **Content Workflow → Dashboard** shows the post with its new status.
+
+If you cannot run Docker, the plugin already lives in a WordPress install here
+(`wp-content/plugins/`) — activate it there and skip `env:start`. See
+[Running everything without Docker](#running-everything-without-docker) for the
+test suites.
+
+### Every command
+
+| Command | Does |
+|---|---|
+| `composer lint` / `composer lint:fix` | phpcs / phpcbf, WordPress ruleset |
+| `composer test` | PHP unit tests (no WordPress, no database) |
+| `composer test:setup` | Download core + create the test database, once |
+| `composer test:integration` | PHP integration tests (**drops all tables** in its database) |
+| `npm run build` / `npm run start` | Production build / watch mode |
+| `npm run lint:js` / `npm run lint:css` / `npm run format` | ESLint / stylelint / wp-prettier |
+| `npm run test:unit` | Jest |
+| `npm run test:e2e` | Playwright against wp-env |
+| `npm run test:e2e:local` | Playwright against a local site (no Docker) |
+| `npm run env:start` | wp-env |
+| `npm run makepot` | Regenerate `languages/sit-cwm.pot` (needs wp-cli) |
+| `npm run screenshots` | Regenerate `docs/screenshots/` (**destructive**) |
+| `npm run check:version` | Assert the version matches in all four files |
+| `npm run build:zip` | Build the release zip into `dist/` |
 
 ## JavaScript build
 
-Tooling is `@wordpress/scripts` (Node 20+; developed on Node 24).
-
-```sh
-npm install
-npm run build       # production build → assets/build/
-npm run start       # watch mode
-npm run lint:js     # ESLint (flat config, @wordpress/eslint-plugin)
-npm run lint:css    # stylelint
-npm run format      # wp-prettier
-npm run test:unit   # Jest, tests/js/
-npm run test:e2e    # Playwright against wp-env (Docker)
-npm run test:e2e:local # Playwright against a local site (Laragon, no Docker)
-npm run env:start   # wp-env (WordPress 6.7, PHP 7.4)
-npm run makepot     # needs wp-cli on PATH
-```
+Tooling is `@wordpress/scripts` (Node 20+; developed on Node 24). wp-env runs
+WordPress 6.7 on PHP 7.4; `npm run makepot` needs wp-cli on `PATH`. The
+commands are in the table above.
 
 ### Entry points
 
@@ -368,3 +408,100 @@ minimum supported version (`Requires at least: 6.5`; wp-env runs 6.7): if
 core does not register `wp-theme` there, the dashboard script is silently not
 printed and the page stays empty. Fix by pinning an older
 `@wordpress/dataviews` or raising the minimum.
+
+## Screenshots
+
+The images in `docs/screenshots/` are generated, not hand-taken:
+
+```sh
+npm run screenshots -- --base-url=http://127.0.0.1/cwm-e2e
+```
+
+`tests/e2e/screenshots.spec.js` seeds a small editorial queue, then photographs
+the sidebar, the timeline, the dashboard, the bulk-action dialog and the
+settings screen at a fixed 1440×900 viewport. It is skipped unless
+`CWM_CAPTURE` is set, so the CI end-to-end job never runs it. **It deletes every
+post on the target site** — point it at a scratch site.
+See [docs/screenshots/README.md](docs/screenshots/README.md).
+
+## Releasing
+
+### 1. Bump the version in exactly four places
+
+The plugin header, `SIT_CWM_VERSION`, `package.json` and `readme.txt`'s
+`Stable tag`. A header that disagrees with `Stable tag` is the classic
+WordPress release bug — the update users are offered is not the code that
+ships — so it is checked mechanically:
+
+```sh
+npm run check:version          # all four must agree
+php bin/check-version.php 1.1.0   # …and equal this version
+```
+
+`release.yml` runs the same check with the tag name, so a tag that does not
+match the files fails the build before anything is published.
+
+### 2. Build and regenerate
+
+```sh
+npm run build        # assets/build/ is committed (D11) — commit the diff
+npm run makepot      # languages/sit-cwm.pot
+```
+
+CI fails if `npm run build` produces a diff against the committed output, so
+this is not optional.
+
+### 3. Update the changelog
+
+`CHANGELOG.md`, Keep a Changelog format, with a dated heading:
+`## [1.1.0] - 2026-11-04`, plus the matching entry in `readme.txt`'s Changelog
+and Upgrade Notice sections.
+
+### 4. Green CI on every leg
+
+PHP 7.4 / 8.1 / 8.3 × WordPress 6.5 / latest, plus the JS and end-to-end jobs.
+No exceptions, no "just this once".
+
+### 5. Build and inspect the zip
+
+```sh
+npm run build:zip          # → dist/content-workflow-manager.zip
+php bin/build-zip.php --list   # what would ship, without building
+```
+
+`bin/build-zip.php` reads `.distignore` and needs only PHP with `ZipArchive` —
+no rsync, no zip binary. The release workflow runs the same script, so what you
+inspect locally is what CI publishes. The zip must contain `assets/build/`,
+`languages/`, `readme.txt` and `LICENSE`, and must **not** contain `tests/`,
+`src/`, `bin/`, `vendor/`, `node_modules/`, `.github/`, `.claude/` or any
+Markdown. CI asserts all of that, then runs `php -l` over every shipped file on
+PHP 7.4.
+
+### 6. Install it into a clean WordPress and use it
+
+Upload the zip to a fresh site with `WP_DEBUG` and `WP_DEBUG_DISPLAY` on,
+activate, and walk one post through the whole flow by hand: Draft → Writing →
+Review, assign a reviewer and a due date, comment, send back, approve, mark
+published. No notices, no warnings, no fatals. Automated end-to-end tests are
+not a substitute for installing the artefact you are about to publish.
+
+### 7. Tag and push
+
+```sh
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+`.github/workflows/release.yml` fires on `v*`: it re-checks the version against
+the tag, rebuilds and compares `assets/build/`, builds the zip, verifies its
+contents, lints every shipped file on PHP 7.4, and attaches the zip to a
+**draft** GitHub release. Review the generated notes and publish it.
+
+### 8. WordPress.org, when publishing there
+
+Copy the tagged tree into SVN `trunk/`, tag it, and put
+`docs/screenshots/*.png` into SVN `assets/` renamed `screenshot-1.png` …
+`screenshot-5.png`, in the order `readme.txt` lists them (sidebar, dashboard,
+timeline, bulk actions, settings). `Stable tag` is what controls which version
+is served — it is already checked in step 1, but it is the one line worth
+re-reading before committing.

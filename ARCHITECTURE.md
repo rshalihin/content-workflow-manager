@@ -1,7 +1,486 @@
 # Architecture
 
-> Stub created in build step 07. The full document (layer diagram, data model,
-> transition pipeline, trade-offs) is written in step 23.
+How Content Workflow Manager is put together, and why. Read
+[WORKFLOW.md](WORKFLOW.md) first if you want the editorial model rather than
+the code.
+
+## Contents
+
+- [The layers](#the-layers)
+- [Why workflow status is not WordPress post status](#why-workflow-status-is-not-wordpress-post-status)
+- [Class-by-class](#class-by-class)
+- [The dependency graph](#the-dependency-graph)
+- [The `transition()` pipeline](#the-transition-pipeline)
+- [Structure vs. authorization](#structure-vs-authorization)
+- [Data model](#data-model)
+- [Known trade-offs](#known-trade-offs)
+- [Authorization](#authorization-sit_cwmworkflowpermissionmanager) *(detail)*
+- [Orchestration](#orchestration-sit_cwmworkflowworkflowmanager) *(detail)*
+- [Bulk actions](#bulk-actions-sit_cwmworkflowbulkprocessor) *(detail)*
+- [Security review](#security-review-step-20) *(detail)*
+
+---
+
+## The layers
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  React                                                       │
+│  src/sidebar/   Gutenberg PluginSidebar                      │
+│  src/dashboard/ @wordpress/dataviews table + bulk actions    │
+│  src/hooks/     useWorkflow, usePosts, useActivity, …        │
+│  src/api/       the only apiFetch caller                     │
+└───────────────────────────┬──────────────────────────────────┘
+                            │  sit-cwm/v1  (REST, nonce/cookie or app password)
+┌───────────────────────────▼──────────────────────────────────┐
+│  REST controllers            includes/REST/                  │
+│  Workflow · Activity · Posts · Batch · User                  │
+│  Argument schemas, permission_callbacks, response shaping.   │
+│  Zero business logic.                                        │
+└───────────────────────────┬──────────────────────────────────┘
+┌───────────────────────────▼──────────────────────────────────┐
+│  WorkflowManager             includes/Workflow/              │
+│  The only way workflow state ever changes.                   │
+│    ├─ TransitionManager   is this edge in the graph?         │
+│    ├─ PermissionManager   may this user do it?               │
+│    ├─ StatusManager       what statuses exist?               │
+│    └─ BulkProcessor       the same path, N times             │
+└──────────┬────────────────────────────────┬──────────────────┘
+┌──────────▼──────────────┐      ┌──────────▼──────────────────┐
+│ PostRepository          │      │ ActivityLogger              │
+│ includes/Content/       │      │ includes/Activity/          │
+│ _sit_cwm_* post meta    │      │ wp_sit_cwm_activity table   │
+└──────────┬──────────────┘      └──────────┬──────────────────┘
+┌──────────▼─────────────────────────────────▼─────────────────┐
+│  WordPress: postmeta, users, capabilities, $wpdb             │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**The UI never decides whether a transition is allowed.** This is the rule the
+whole design hangs on:
+
+- The sidebar renders buttons from `available_transitions` — a list the *server*
+  computed for this user, on this post, from its *current* status.
+- Clicking one sends `{ from, status }` back. The server does not trust either
+  value: it re-reads the stored status, re-checks the graph, re-checks the
+  capabilities, and only then writes.
+- `capabilities` in a response is a display hint for hiding controls. Every
+  mutating path re-derives the same answer before acting.
+
+Consequence: a hostile client with a valid cookie and nonce can do exactly what
+the UI lets an honest one do, and nothing more. Deleting the JavaScript would
+not weaken a single rule.
+
+---
+
+## Why workflow status is not WordPress post status
+
+The most consequential decision in the plugin (decision D3), and the one most
+often gotten wrong by editorial plugins: **`_sit_cwm_status` never touches
+`wp_posts.post_status`.** They are two independent fields that are allowed to
+disagree.
+
+It is tempting to collapse them. Register `cwm_review` and `cwm_approved` as
+custom post statuses, and the workflow "just works" in the posts list. That
+approach breaks in several places at once:
+
+**1. Scheduled publishing.** A post scheduled for next Tuesday has
+`post_status = future`. If the workflow owns that field, an editor approving the
+post must write `approved` into it — destroying the schedule, and with it the
+`_wp_cron` event WordPress created. Keeping them separate means a post can be
+`future` *and* `approved`: WordPress publishes it on Tuesday, and the workflow
+independently records that a human cleared it. Neither system has to know about
+the other. The same argument applies to `private`, `pending`, and to whatever
+the next core status turns out to be.
+
+**2. Editing live content.** [Re-review flow](WORKFLOW.md#3-the-re-review-flow):
+published article needs a correction, so it goes back to `writing`. If the two
+fields were one, that would *unpublish* the article — a 404 for readers and,
+briefly, for search engines. With separate fields the post stays `publish` while
+the workflow cycles underneath it.
+
+**3. Every other plugin's assumptions.** `post_status` is load-bearing core
+infrastructure. Feeds, sitemaps, caches, REST `status` filters, `WP_Query`
+defaults, SEO plugins and membership plugins all branch on it. A custom status
+slug in that field means a post that is invisible to half of them, and the bug
+reports arrive months later.
+
+**4. Losing the audit trail.** One field can hold one fact. Two fields hold
+"this is publicly published" *and* "this went through review twice and was
+approved by Dana on the 12th" at the same time.
+
+What this costs: the workflow status does not appear in the core posts-list
+status filter, and **reaching `published` does not publish anything**. That
+second point is stated plainly in the README, the sidebar and `readme.txt`,
+because a plugin that silently publishes content would be worse than one that
+does not. Turning `approved` into a scheduled publish is a Pro feature — it can
+be built entirely on the `sit_cwm_status_changed` hook, without touching core.
+
+---
+
+## Class-by-class
+
+### `includes/Core/`
+
+| Class | Responsibility |
+|---|---|
+| `Plugin` | Wires every service into the `Container` and registers it in the right phase: `core` on `plugins_loaded`, `admin` only when `is_admin()`, `rest` on `rest_api_init` (priority 5) so controllers are never constructed on a front-end request. |
+| `Container` | A minimal service locator: `set( $id, $factory )` / `get( $id )`, lazily instantiated, memoised. Not a DI framework — just enough to keep constructors explicit and classes testable. |
+| `Interfaces\Bootable` | `register()`. The only thing `Plugin` needs to know about a service to boot it. |
+| `Activator` / `Deactivator` | Create the activity table, grant capabilities, flush caches. `Activator::initialize_site()` also runs on `wp_initialize_site` for new multisite sites. |
+| `Database` | Owns `{$wpdb->prefix}sit_cwm_activity`: `dbDelta()` schema, the `sit_cwm_db_version` option, and an upgrade check on `plugins_loaded` so a schema change does not need reactivation. |
+| `Settings` | Reads `sit_cwm_settings`; `enabled_post_types()` and `available_post_types()`. The `sit_cwm_enabled_post_types` filter lives here. |
+| `Assets` | The single enqueue path. Reads each entry's generated `*.asset.php` for dependencies and version, uses the `sit-cwm-{entry}-{js,css}` handles, wires `wp_set_script_translations()`, and prints the `window.sitCwm` bootstrap with `wp_add_inline_script()`. |
+
+### `includes/Workflow/`
+
+| Class | Responsibility |
+|---|---|
+| `StatusManager` | The authoritative status registry. Nothing else hard-codes a slug. Filterable (`sit_cwm_statuses`) with the result validated, so a broken extension cannot corrupt core. Also the shared status sanitizer. |
+| `TransitionManager` | Pure graph structure: `is_valid( $from, $to )`, `targets_for()`, `describe()`. No permissions, no database, no post state. |
+| `PermissionManager` | Every authorization question in the plugin. The only class that answers "may this user…". Uses `user_can( $user_id, … )` throughout so it works for arbitrary users and inside bulk loops. |
+| `Capabilities` | The six capability constants and the **only** place role names appear. `add_caps()`/`remove_caps()` run from activation and uninstall only. |
+| `WorkflowManager` | The orchestrator, and the only writer. Combines the three above, persists through `PostRepository`, logs through `ActivityLogger`, fires the `sit_cwm_*` actions, and produces the REST-shaped read model (`get_workflow()`). |
+| `BulkProcessor` | Loops up to 100 posts, calling the *same* `WorkflowManager` method a single request would. No bulk SQL, no hoisted permission check. |
+
+### `includes/Content/`
+
+| Class | Responsibility |
+|---|---|
+| `PostMeta` | `register_post_meta()` for the three keys, with `type`, `sanitize_callback`, `auth_callback`, `show_in_rest` and `context: [ 'edit' ]`. Also locks `_sit_cwm_status` against direct meta writes via `map_meta_cap`, so the state machine cannot be bypassed through core's meta endpoint. |
+| `PostRepository` | All meta reads and writes, the due-date sanitizer, `is_managed()`, and the dashboard's `WP_Query`. The only place that knows the meta keys are strings. |
+
+### `includes/Activity/`
+
+| Class | Responsibility |
+|---|---|
+| `ActivityEntry` | An immutable value object for one row. |
+| `ActivityLogger` | Writes and reads the activity table. `get_for_posts()` batch-loads the last entry of many posts in one query (the dashboard's N+1 fix). Fires `sit_cwm_activity_logged`. |
+
+### `includes/REST/`
+
+| Class | Responsibility |
+|---|---|
+| `AbstractController` | Shared argument schemas (`post_id`, pagination, due date), `require_login()`, `resolve_post()` (the uniform 404), `forbidden()`, `error_to_response()` (code → HTTP status) and `collection_response()` (the `X-WP-Total` headers). |
+| `WorkflowController` | `GET|POST /posts/{id}/workflow`, `GET /statuses`. |
+| `ActivityController` | `GET /posts/{id}/activity`, `POST /posts/{id}/comments`. |
+| `PostsController` | `GET /posts` — the dashboard collection, batch-loaded. |
+| `BatchController` | `POST /posts/batch`, delegating to `BulkProcessor`. |
+| `UserController` | `GET /users` — assignable reviewers, deliberately narrow. |
+| `ActivityFormatter` | Turns an `ActivityEntry` into its REST shape, resolving slugs and user IDs to labels. |
+| `UserSummaries` | Batch user loading. One `get_users()` field-list query for every author, reviewer and activity actor on a page. |
+
+### `admin/`
+
+| Class | Responsibility |
+|---|---|
+| `Dashboard` | Registers the top-level menu and prints an empty React root. |
+| `Settings` | The settings screen, via the Settings API only — `options.php` handles the nonce, and `option_page_capability_sit_cwm_settings_group` makes it require `sit_cwm_manage_workflows` instead of `manage_options`. |
+
+---
+
+## The dependency graph
+
+Every arrow is a constructor argument. There are no static calls between
+services and no globals.
+
+```
+StatusManager  (no dependencies)
+     ▲
+     ├──────────────── TransitionManager ────┐
+     │                                       │
+     ├──────────────── PostRepository ───────┤
+     │                        ▲              │
+     │                        │              │
+     ├──── PermissionManager ─┤              │
+     │         ▲   ▲   ▲                     │
+     │         │   │   └── Settings          │
+     │         │   └────── Capabilities      │
+     │         │                             │
+     └─────────┴──────── WorkflowManager ◄───┘
+                            ▲   │
+                            │   └──► ActivityLogger ──► Database
+                            │
+          ┌─────────────────┼──────────────────┐
+          │                 │                  │
+     BulkProcessor    REST controllers    Assets / Dashboard / Sidebar
+```
+
+Two properties fall out of this shape:
+
+- **`TransitionManager` and `PermissionManager` do not know about each other.**
+  Neither can be tricked into standing in for the other.
+- **Everything above `PostRepository` and `ActivityLogger` is testable without
+  a database.** `tests/php/unit/` covers `StatusManager`, `TransitionManager`
+  and `Container` with no WordPress at all.
+
+---
+
+## The `transition()` pipeline
+
+`WorkflowManager::transition( $post_id, $from, $to, $user_id )`, in order. Any
+step failing returns a `WP_Error` and **writes nothing** — no meta, no activity
+row, no action fired.
+
+| # | Check | On failure |
+|---|---|---|
+| 1 | **Post gate.** The post exists, its type is workflow-enabled, and the user can read it. | `sit_cwm_not_managed` **404** |
+| 2 | **Concurrency guard.** `$from` equals the status stored right now. | `sit_cwm_status_conflict` **409** |
+| 3 | **Status exists.** `$to` is in the `StatusManager` registry. | `sit_cwm_invalid_status` **400** |
+| 4 | **Edge exists.** `TransitionManager::is_valid( $from, $to )`. | `sit_cwm_invalid_transition` **400** |
+| 5 | **Authorization.** `PermissionManager::can_change_status()` — user exists, `edit_post` on this post, the capability mapped to `$to`, `publish_post` for `published`, then the `sit_cwm_can_transition` filter's final word. | `sit_cwm_forbidden` **403** |
+| 6 | **Persist.** `PostRepository` writes `_sit_cwm_status`. | `sit_cwm_update_failed` **500** |
+| 7 | **Log.** Exactly one `status_changed` row. | |
+| 8 | **Announce.** `do_action( 'sit_cwm_status_changed', $post_id, $from, $to, $user_id )`. | |
+
+Notes on the ordering:
+
+- **Step 1 before everything** and identical for missing / unmanaged /
+  unreadable posts, so a `403` is only ever returned for a post the caller can
+  already see. Otherwise the error codes would enumerate private post IDs.
+- **Step 2 before step 5.** A stale client learns its view is out of date rather
+  than being told it lacks a permission it may well have.
+- **Step 5 last** among the checks, because it is the expensive one — it
+  consults roles, meta capabilities and a filter.
+- `can_transition()` runs steps 1–5 *without* writing, and `transition()`
+  re-runs all of them itself. There is deliberately no check-then-act gap
+  between the two: the REST permission callback calling `check_transition()`
+  first is an optimization for error reporting, never the authorization.
+
+### The 409 concurrency guard
+
+A status change is conditional on the status the client believed was current:
+
+```
+client GET  → status = "review"
+             …meanwhile another editor moves it to "needs_changes"…
+client POST → { from: "review", status: "approved" }   → 409, nothing written
+```
+
+This closes the read-modify-write window that any UI opens. It is
+**application-level, not a database lock**: two PHP processes writing in the
+same millisecond can still interleave. That is the accepted trade-off — see
+[Known trade-offs](#known-trade-offs) — because the realistic failure is a human
+with a stale browser tab, measured in minutes, not two concurrent writes
+measured in microseconds.
+
+`from` is required whenever `status` is sent, so a client cannot opt out of the
+guard by omitting it.
+
+---
+
+## Structure vs. authorization
+
+`TransitionManager` answers **"is `review → approved` an edge in the graph?"**
+`PermissionManager` answers **"may user 7 put post 125 into `approved`?"**
+
+They are separate classes, with separate filters, that never call each other.
+`WorkflowManager` is the only place both answers are consulted. Why keep them
+apart:
+
+- **They fail differently, and callers care which.** A missing edge is a `400`
+  (the request is nonsense from this state); a denied capability is a `403` (the
+  request is sensible, you just may not). Merging them would flatten both into
+  "no".
+- **They vary independently.** Pro adds workflows with different graphs
+  (`sit_cwm_transition_map`) and different role rules
+  (`sit_cwm_status_capability_map`, `sit_cwm_can_transition`). Those are
+  separate extension points precisely because a customer usually wants one
+  without the other.
+- **One of them is pure.** `TransitionManager` has no database, no current user
+  and no WordPress state, so the state machine is exhaustively unit-testable
+  with no fixtures.
+- **Neither can substitute for the other.** A filter on the graph cannot grant a
+  capability; a filter on permissions cannot invent an edge. Widening one leaves
+  the other standing.
+
+The same split shows up in the permission checks themselves: steps 1–2 of
+`can_change_status()` are **hard gates** that no filter can override (the user
+must exist; the post must exist and be workflow-enabled), while steps 3–5 pass
+through `sit_cwm_can_transition`. A filter can therefore tighten or loosen
+*policy*, but never make the plugin act on a post that has no workflow or a user
+who is not logged in.
+
+---
+
+## Data model
+
+### Post meta (decision D6)
+
+| Key | Type | Default | Sanitizer |
+|---|---|---|---|
+| `_sit_cwm_status` | string | `draft` | `StatusManager::sanitize()` — `sanitize_key` plus an allow-list against the registry |
+| `_sit_cwm_reviewer_id` | integer | `0` | `absint`, existing user, must hold `sit_cwm_review_content`. Negative IDs are rejected, not flipped |
+| `_sit_cwm_due_date` | string | `''` | Round-trip `Y-m-d` parse; `''` clears |
+
+All three are registered with `register_post_meta()`, `single => true`,
+`show_in_rest => true` with `context: [ 'edit' ]` — so a reviewer ID or due date
+never leaks into the public `view` context of a published post — and an
+`auth_callback` that delegates to `PermissionManager`.
+
+`_sit_cwm_status` is additionally locked against direct writes: its
+`auth_callback` returns false, **and** `map_meta_cap` maps
+`add_/edit_/delete_post_meta` on that key to `do_not_allow`. The belt and braces
+are deliberate — multisite super admins bypass `auth_callback`. The result is
+that the status can only change by going through the state machine.
+
+### Activity table (decision D8)
+
+`{$wpdb->prefix}sit_cwm_activity`:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `bigint(20) unsigned` | `AUTO_INCREMENT`, primary key |
+| `post_id` | `bigint(20) unsigned` | |
+| `user_id` | `bigint(20) unsigned` | `0` = system |
+| `action` | `varchar(50)` | Closed set: `status_changed`, `reviewer_assigned`, `reviewer_cleared`, `due_date_set`, `due_date_cleared`, `comment_added` |
+| `old_value` | `varchar(191)` NULL | Status slug or user ID, as text |
+| `new_value` | `varchar(191)` NULL | |
+| `message` | `text` NULL | Comment body, `wp_kses_post()` |
+| `context` | `longtext` NULL | JSON extras. **Never** serialized PHP — nothing here is ever `unserialize()`d |
+| `created_at` | `datetime` | UTC |
+
+Indexes:
+
+| Key | Columns | Serves |
+|---|---|---|
+| `PRIMARY` | `id` | |
+| `post_created` | `(post_id, created_at)` | The timeline query and the dashboard's last-activity batch. `EXPLAIN` must show `type: ref, key: post_created` |
+| `user_id` | `(user_id)` | "What has this person done" (Pro) |
+| `action` | `(action)` | The `action` filter on the timeline |
+
+Why a table and not post meta: an activity log is append-only, needs ordering
+and pagination, and grows without bound. A serialized array in meta would be
+read and rewritten in full on every append, would break under concurrent writes,
+and could not be indexed or paginated.
+
+Schema version lives in the `sit_cwm_db_version` option (not autoloaded) and is
+compared on `plugins_loaded`, so an upgrade runs without reactivation.
+
+### Options
+
+| Option | Autoloaded | Contents |
+|---|---|---|
+| `sit_cwm_settings` | yes | `{ post_types: [ 'post', 'page' ] }` — small on purpose |
+| `sit_cwm_db_version` | no | Schema version |
+
+### Uninstall
+
+`uninstall.php` (guarded by `WP_UNINSTALL_PLUGIN`) drops the activity table,
+deletes both options, removes all `_sit_cwm_*` post meta with a prepared `LIKE`
+delete, and strips the six capabilities from **every** role — not just the four
+in `role_map()`, so grants a site owner added to custom roles are cleaned up
+too.
+
+---
+
+## Known trade-offs
+
+These are real limitations, chosen deliberately. Each names its Pro follow-up.
+
+### 1. Multi-field updates are not transactional
+
+`POST /posts/{id}/workflow` can change the reviewer, the due date and the status
+in one call. All three are authorized and validated *before* anything is
+written, then applied in a fixed order (reviewer → due date → status). But the
+writes are separate `update_post_meta()` calls with no transaction around them:
+if the status write fails after the reviewer write succeeded — realistically
+only a concurrent edit landing between the check and the write — the reviewer
+change stays applied and the response reports the status error.
+
+*Why accepted:* WordPress' options and meta APIs are not transactional, and
+wrapping `$wpdb` in explicit transactions across core API calls is fragile (and
+a no-op on MyISAM). The window is a few hundred microseconds after every check
+has already passed.
+
+*Pro follow-up:* a compensating write — replay the pre-change snapshot the
+permission check already loaded — plus an `activity` row recording the partial
+application.
+
+### 2. No object caching
+
+Every request re-reads the status registry, the transition map and the post's
+meta. The registry and map are memoised **per request** (and only once `init`
+has fired, so untranslated labels are never cached), but nothing is written to
+`wp_cache_*` or a transient.
+
+*Why accepted:* the data is small, `get_post_meta()` is already served by
+WordPress' own post-meta cache, and a cache is a correctness liability in a
+plugin whose whole job is answering "what is the status *right now*". The
+concurrency guard depends on reading fresh state.
+
+*Pro follow-up:* cache the *derived* per-user permission matrix (the expensive
+part) under a key that includes the user, the post and the post's
+`modified_gmt`, invalidated on `sit_cwm_status_changed`.
+
+### 3. `meta_query` does not scale indefinitely
+
+The dashboard filters on `_sit_cwm_status`, `_sit_cwm_reviewer_id` and
+`_sit_cwm_due_date` through `WP_Query`'s `meta_query`. Each clause is a join
+against `wp_postmeta`, a table that grows with every plugin on the site. The
+query keeps the most selective clause first and combines at most a few clauses,
+and the collection is capped at 100 rows per page with `fields => ids`, so a
+page costs a fixed number of queries regardless of its size — but the *join*
+itself gets slower as `wp_postmeta` grows.
+
+*Why accepted:* it is correct, it uses core APIs, and it is comfortably fast at
+the scale Free targets (measured against 500 posts / 5 000 activity rows; see
+[DEVELOPMENT.md](DEVELOPMENT.md#budgets)).
+
+*Pro follow-up:* a dedicated `{$wpdb->prefix}sit_cwm_index` table holding
+status, reviewer and due date per post, with a composite index, kept in sync
+from `sit_cwm_status_changed` and friends. The `PostRepository` query method is
+the single seam it would replace.
+
+### 4. The 409 guard is not a lock
+
+Covered [above](#the-409-concurrency-guard): it closes the human-scale
+read-modify-write window, not a microsecond-scale write race. A genuine
+simultaneous double-write can still produce a lost update.
+
+*Pro follow-up:* `SELECT … FOR UPDATE` on a row in the index table from (3),
+which gives a real lock to take — something the meta table cannot offer.
+
+### 5. Bulk actions are bounded, not queued
+
+A batch is capped at 100 posts and runs synchronously inside the request.
+Batches over 50 raise the memory limit to the admin limit; the **time** limit is
+never lifted, because `MAX_ITEMS` is what bounds the runtime.
+
+*Why accepted:* a queue needs `wp_cron` (unreliable on low-traffic sites) or a
+real worker, and partial-progress reporting. 100 posts covers a full dashboard
+page.
+
+*Pro follow-up:* an Action Scheduler-backed queue with progress reporting.
+
+### 6. The activity log is append-only and never pruned
+
+Rows accumulate forever and are only removed at uninstall. A busy site
+accumulates a few rows per post per cycle.
+
+*Why accepted:* an audit log that deletes itself is not an audit log, and the
+table is narrow and indexed.
+
+*Pro follow-up:* retention policy plus CSV/JSON export, as part of advanced
+audit logs.
+
+### 7. `@wordpress/dataviews` is bundled, not a core script
+
+It is not registered by every supported WordPress version, so it ships inside
+`dashboard.js` (192 KiB gzipped). DataViews 19 also externalizes to `wp-theme`
+and `wp-private-apis`, whose availability on WordPress 6.5 is
+[still unverified](DEVELOPMENT.md#bundle-size-and-wordpressdataviews).
+
+*Pro follow-up:* none needed — it resolves itself as the minimum supported
+version rises.
+
+---
+
+# Reference detail
+
+The sections above are the design. The ones below are the exact contracts —
+check order, error codes, filter semantics — written as the classes were built,
+and the security review that audited them.
 
 ## Authorization (`Sit_Cwm\Workflow\PermissionManager`)
 
